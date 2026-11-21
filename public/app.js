@@ -357,7 +357,7 @@ function modelPopHTML() {
 }
 function budgetPopHTML() {
   const used = usedNano(), pct = pctOf(used), tot = Math.max(1, Object.values(S.ledger.byModel).reduce((a, b) => a + b, 0));
-  const colors = { sonnet: '#7ee0c0', opus: '#8aa9ff', fable: '#d6a0ff' };
+  const colors = { sonnet: 'color-mix(in srgb,var(--accent) 100%,transparent)', opus: 'color-mix(in srgb,var(--accent) 55%,transparent)', fable: 'color-mix(in srgb,var(--accent) 26%,transparent)' };
   const stack = MODEL_KEYS.map((k) => `<i style="flex:${S.ledger.byModel[k] / tot};background:${colors[k]}"></i>`).join('');
   const rows = MODEL_KEYS.map((k) => `<div class="mrow"><span class="mi ${k}">${ic(MODELS[k].icon, 'sm')}</span><span class="nm"><b>${MODELS[k].name}</b></span><span class="rt"><span class="v">${dm(fmtUSD(usd(S.ledger.byModel[k])))}</span></span></div>`).join('');
   const lim = `<div class="mrow">${ic(S.ledger.override ? 'unlock' : 'shield')}<span class="nm"><b>最悪ケース制限</b></span><button class="sw ${S.ledger.override ? '' : 'on'}" data-lim ${isOwner() ? '' : 'disabled'} aria-label="最悪ケース制限" aria-pressed="${!S.ledger.override}" style="margin-left:auto"></button></div>`;
@@ -778,13 +778,28 @@ $('#scroll').addEventListener('scroll', (e) => $('#top').classList.toggle('scrol
 
 /* ---------- markdown(最小限) ---------- */
 function inline(s) { s = esc(s); s = s.replace(/`([^`]+)`/g, '<code>$1</code>'); s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); return s.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'); }
+const TROW = /^\s*\|.*\|\s*$/, TSEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+const cells = (ln) => ln.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+function tableHTML(rows) {
+  const al = cells(rows[1]).map((c) => (/^:-+:$/.test(c) ? 'center' : /-:$/.test(c) ? 'right' : ''));
+  const td = (t, c, i) => `<${t}${al[i] ? ` style="text-align:${al[i]}"` : ''}>${inline(c)}</${t}>`;
+  const head = '<tr>' + cells(rows[0]).map((c, i) => td('th', c, i)).join('') + '</tr>';
+  const body = rows.slice(2).map((r) => '<tr>' + cells(r).map((c, i) => td('td', c, i)).join('') + '</tr>').join('');
+  return `<div class="tbl"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
 function para(s) {
   let out = '', buf = [], ul = false, ol = false;
   const fp = () => { if (buf.length) { out += '<p>' + buf.map(inline).join('<br>') + '</p>'; buf = []; } };
   const fl = () => { if (ul) { out += '</ul>'; ul = false; } if (ol) { out += '</ol>'; ol = false; } };
-  for (const ln of s.split('\n')) {
-    let m;
+  const lines = s.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const ln = lines[i]; let m;
     if (!ln.trim()) { fp(); fl(); continue; }
+    if (TROW.test(ln) && i + 1 < lines.length && TSEP.test(lines[i + 1]) && lines[i + 1].includes('-')) {
+      fp(); fl(); const rows = [ln, lines[i + 1]]; i += 2;
+      while (i < lines.length && TROW.test(lines[i])) rows.push(lines[i++]);
+      i--; out += tableHTML(rows); continue;
+    }
     if ((m = ln.match(/^(#{1,3})\s+(.*)/))) { fp(); fl(); const n = m[1].length + 2; out += `<h${n}>${inline(m[2])}</h${n}>`; continue; }
     if ((m = ln.match(/^\s*[-*]\s+(.*)/))) { fp(); if (ol) { out += '</ol>'; ol = false; } if (!ul) { out += '<ul>'; ul = true; } out += '<li>' + inline(m[1]) + '</li>'; continue; }
     if ((m = ln.match(/^\s*\d+\.\s+(.*)/))) { fp(); if (ul) { out += '</ul>'; ul = false; } if (!ol) { out += '<ol>'; ol = true; } out += '<li>' + inline(m[1]) + '</li>'; continue; }
@@ -819,7 +834,10 @@ function protectMath(t, list) {
   t = t.replace(/\$\$([\s\S]+?)\$\$/g, (_, x) => put(x.trim(), true));
   t = t.replace(/\\\[([\s\S]+?)\\\]/g, (_, x) => put(x.trim(), true));
   t = t.replace(/\\\(([\s\S]+?)\\\)/g, (_, x) => put(x.trim(), false));
-  t = t.replace(/\$([^\s$\d](?:[^$\n]*[^\s$])?)\$(?!\d)/g, (all, x) => (/[\\^_{}=+*/<>-]/.test(x) || /^[A-Za-z]{1,2}$/.test(x) ? put(x, false) : all));
+  t = t.replace(/\$([^\s$](?:[^$\n]*[^\s$])?)\$(?!\d)/g, (all, x) => {
+    if (/^\d/.test(x)) return /^[\d.,\s+\-*/^_{}()=\\<>a-zA-Z]+$/.test(x) && (/[\\^_{}=+*/<>-]/.test(x) || /^\d[\d.,]*$/.test(x)) ? put(x, false) : all;
+    return /[\\^_{}=+*/<>-]/.test(x) || /^[A-Za-z]{1,2}$/.test(x) ? put(x, false) : all;
+  });
   return t;
 }
 const EXT = { javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', python: 'py', py: 'py', html: 'html', css: 'css', json: 'json', markdown: 'md', md: 'md', bash: 'sh', sh: 'sh', shell: 'sh', sql: 'sql', yaml: 'yml', yml: 'yml', xml: 'xml', csv: 'csv', jsx: 'jsx', tsx: 'tsx', java: 'java', c: 'c', cpp: 'cpp', go: 'go', rust: 'rs', ruby: 'rb', php: 'php', swift: 'swift', kotlin: 'kt', mermaid: 'mmd', text: 'txt' };
@@ -1127,6 +1145,9 @@ const COARSE = matchMedia('(hover:none) and (pointer:coarse)').matches; // タ�
   };
   if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', () => { window.scrollTo(0, 0); fit(); }); }
   addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 250)); fit();
+  const sc = document.querySelector('#scroll'); let pinned = true;
+  sc.addEventListener('scroll', () => { pinned = sc.scrollHeight - sc.scrollTop - sc.clientHeight < 70; }, { passive: true });
+  if (window.ResizeObserver) new ResizeObserver(() => { if (pinned && S.chat && S.chat.msgs && S.chat.msgs.length) sc.scrollTop = sc.scrollHeight; }).observe(sc);
   const dock = document.querySelector('.dock');
   if (dock && window.ResizeObserver) new ResizeObserver(() => { root.style.setProperty('--dock-h', dock.offsetHeight + 'px'); scrollEnd(); }).observe(dock);
   // iOS Safari は user-scalable=no を無視するので、ピンチと二本指操作を止める
