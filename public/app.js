@@ -17,6 +17,7 @@ const ic = (n, c = '') => `<svg class="i ${c}"><use href="#i-${n}"/></svg>`;
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtPct = (n) => (n < 0.01 ? n.toFixed(4) : n < 10 ? n.toFixed(2) : n.toFixed(1));
 const fmtUSD = (n) => '$' + (n < 0.01 ? n.toFixed(4) : n < 1 ? n.toFixed(3) : n.toFixed(2));
+const dm = (s) => `<span class="dm">${s}</span>`;
 const fmtTok = (n) => Math.round(n).toLocaleString('en-US');
 const fmtK = (n) => (n >= 1000 ? n / 1000 + 'K' : n);
 const usd = (nano) => nano / 1e9;
@@ -81,6 +82,7 @@ const pctOf = (nano) => (nano / S.cap) * 100;
 /* ---------- boot / auth ---------- */
 let authMode = 'login';
 function showAuth(mode) {
+  Orb.scan(document);
   authMode = mode; $('#shell').hidden = true; $('#shell').classList.remove('on');
   const a = $('#auth'); a.hidden = false; a.classList.remove('out');
   $('#authTitle').textContent = mode === 'setup' ? '最高権限者を作成' : 'ログイン';
@@ -284,15 +286,22 @@ function checkAlerts() {
   lsSet(key, S.ledger.resets + ':' + lvl);
   toast('予算の' + lvl + '%に達しました', 'alert', lvl >= 80 ? 'bad' : 'warn');
 }
+function orbSync() {
+  if (typeof Orb === 'undefined') return;
+  const p = pctOf(usedNano());
+  const state = p >= 90 ? 'alert' : S.streaming ? (S.phase === 'speak' ? 'speaking' : 'thinking') : p >= 80 ? 'alert' : 'idle';
+  Orb.set({ state, used: p }); $('#composer')?.classList.toggle('busy', !!S.streaming);
+}
+const thkHTML = (label) => `<div class="thk"><span class="orbw"><canvas data-orb="mini" data-size="48"></canvas></span><div class="tt"><b>${label}</b><p class="tc"></p></div></div>`;
 function renderBudget() {
   const pct = pctOf(usedNano()), q = quote(S.model), est = S.text || S.atts.length ? pctOf(q.expectedNano) : 0;
   const b = $('#btnBudget'); b.classList.toggle('warn', S.ledger.override);
-  if (!b._built) { b.innerHTML = '<span class="rg"></span><span class="pc"></span><span class="lk" hidden></span>'; b._built = true; }
+  if (!b._built) { b.innerHTML = '<span class="rg"></span><span class="pc dm"></span><span class="lk" hidden></span>'; b._built = true; }
   b.querySelector('.rg').innerHTML = ringSVG(30, 12, 4, pct, est);
   tween(b.querySelector('.pc'), pct, '%');
   const lk = b.querySelector('.lk'); lk.hidden = !S.ledger.override; lk.innerHTML = ic('unlock', 'sm');
   if (S.pop && (S.pop.kind === 'budget' || S.pop.kind === 'model')) S.pop.refresh();
-  checkAlerts();
+  orbSync(); checkAlerts();
 }
 function renderMeter() {
   const q = quote(S.model), u = pctOf(usedNano()), e = pctOf(q.expectedNano), w = pctOf(q.worstNano), g = q.gate || { ok: true };
@@ -303,7 +312,7 @@ function renderMeter() {
   else if (S.quoteErr) nums.innerHTML = `<span class="n">${ic('x', 'sm')}見積もれません</span>`;
   else {
     const over = u + w > 100;
-    nums.innerHTML = `<span class="n">${ic('tok', 'sm')}<b>${fmtTok(q.newTokens)}</b></span><span class="n"><b>${fmtPct(u)}%</b><i>→</i><b class="acc">${fmtPct(u + e)}%</b></span><span class="n mx ${over ? 'bad' : ''}">最大 <b>${fmtPct(u + w)}%</b></span>`;
+    nums.innerHTML = `<span class="n">${ic('tok', 'sm')}<b>${dm(fmtTok(q.newTokens))}</b></span><span class="n"><b>${dm(fmtPct(u) + '%')}</b><i>→</i><b class="acc">${dm(fmtPct(u + e) + '%')}</b></span><span class="n mx ${over ? 'bad' : ''}">${ic('bolt', 'sm')}<b>${dm(fmtPct(u + w) + '%')}</b></span>`;
   }
   const lim = $('#limBox'); const show = !S.streaming && !S.counting && (g.why === 'worst' || (S.ledger.override && u + w > 100));
   lim.hidden = !show; lim.className = 'lim' + (S.ledger.override ? ' ov' : '');
@@ -328,7 +337,7 @@ function openPop(anchor, kind, build, { w = 340, align = 'left' } = {}) {
   const el = document.createElement('div'); el.className = 'pop glass'; el.style.width = w + 'px'; $('#layer').appendChild(el);
   const r = anchor.getBoundingClientRect(); let left = align === 'right' ? r.right - w : r.left; left = Math.max(12, Math.min(innerWidth - w - 12, left));
   el.style.left = left + 'px'; el.style.top = r.bottom + 8 + 'px'; el.style.transformOrigin = (align === 'right' ? 'right' : 'left') + ' top';
-  const pop = { kind, el, anchor, refresh() { el.innerHTML = build(); } }; S.pop = pop; pop.refresh(); anchor.setAttribute && anchor.setAttribute('aria-expanded', 'true');
+  const pop = { kind, el, anchor, refresh() { const old = el.querySelector('[data-gauge]'); el.innerHTML = build(); const nw = el.querySelector('[data-gauge]'); if (nw && old && old._orb) nw.replaceWith(old); else if (nw) Orb.gauge(nw); } }; S.pop = pop; pop.refresh(); anchor.setAttribute && anchor.setAttribute('aria-expanded', 'true');
 }
 document.addEventListener('pointerdown', (e) => { if (S.pop && !S.pop.el.contains(e.target) && !(S.pop.anchor && S.pop.anchor.contains && S.pop.anchor.contains(e.target))) closePop(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (S.pop) closePop(); else if ($('.modal-bg')) closeModal(); else if (S.edit) cancelEdit(); else if (S.pv.open && innerWidth <= 900) pvClose(); } });
@@ -336,10 +345,10 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (S.po
 $('#btnModel').onclick = (e) => openPop(e.currentTarget, 'model', modelPopHTML, { w: 360 });
 $('#btnBudget').onclick = (e) => openPop(e.currentTarget, 'budget', budgetPopHTML, { w: 340, align: 'right' });
 $('#limBox').onclick = (e) => { if (isOwner()) openPop(e.currentTarget, 'budget', budgetPopHTML, { w: 340, align: 'right' }); else { shake(e.currentTarget); toast('解除は最高権限者のみです', 'lock', 'warn'); } };
-const priceLabel = (k) => { const m = S.models[k]; return m ? `$${m.in / 1000} / $${m.out / 1000}` : ''; };
+const priceLabel = (k) => { const m = S.models[k]; return m ? dm(`$${m.in / 1000} / $${m.out / 1000}`) : ''; };
 function modelPopHTML() {
   const rows = MODEL_KEYS.map((k) => { const m = MODELS[k], q = quote(k);
-    return `<button class="mrow ${k === S.model ? 'sel' : ''}" data-model="${k}"><span class="mi ${k}">${ic(m.icon)}</span><span class="nm"><b>${m.name}</b><span>${priceLabel(k)}</span></span><span class="rt"><span class="v">+${fmtPct(pctOf(q.expectedNano))}%</span><span class="v2">最大 ${fmtPct(pctOf(q.worstNano))}%</span></span><span class="ck">${ic('check', 'sm')}</span></button>`; }).join('');
+    return `<button class="mrow ${k === S.model ? 'sel' : ''}" data-model="${k}"><span class="mi ${k}">${ic(m.icon)}</span><span class="nm"><b>${m.name}</b><span>${priceLabel(k)}</span></span><span class="rt"><span class="v">${dm('+' + fmtPct(pctOf(q.expectedNano)) + '%')}</span><span class="v2">${ic('bolt', 'sm')}${dm(fmtPct(pctOf(q.worstNano)) + '%')}</span></span><span class="ck">${ic('check', 'sm')}</span></button>`; }).join('');
   const eff = S.config.effortMode === 'select'
     ? `<div class="seg3" data-eff>${['low', 'medium', 'high'].map((e) => `<button data-eff-v="${e}" class="${S.effort === e ? 'on' : ''}">${EFF_LABEL[e]}</button>`).join('')}</div>`
     : `<span class="lkc">${ic('lock', 'sm')}Effort 中</span>`;
@@ -348,11 +357,14 @@ function modelPopHTML() {
 }
 function budgetPopHTML() {
   const used = usedNano(), pct = pctOf(used), tot = Math.max(1, Object.values(S.ledger.byModel).reduce((a, b) => a + b, 0));
-  const colors = { sonnet: '#34c759', opus: '#0a84ff', fable: '#bf5af2' };
+  const colors = { sonnet: '#7ee0c0', opus: '#8aa9ff', fable: '#d6a0ff' };
   const stack = MODEL_KEYS.map((k) => `<i style="flex:${S.ledger.byModel[k] / tot};background:${colors[k]}"></i>`).join('');
-  const rows = MODEL_KEYS.map((k) => `<div class="mrow"><span class="mi ${k}">${ic(MODELS[k].icon, 'sm')}</span><span class="nm"><b>${MODELS[k].name}</b></span><span class="rt"><span class="v">${fmtUSD(usd(S.ledger.byModel[k]))}</span></span></div>`).join('');
+  const rows = MODEL_KEYS.map((k) => `<div class="mrow"><span class="mi ${k}">${ic(MODELS[k].icon, 'sm')}</span><span class="nm"><b>${MODELS[k].name}</b></span><span class="rt"><span class="v">${dm(fmtUSD(usd(S.ledger.byModel[k])))}</span></span></div>`).join('');
   const lim = `<div class="mrow">${ic(S.ledger.override ? 'unlock' : 'shield')}<span class="nm"><b>最悪ケース制限</b></span><button class="sw ${S.ledger.override ? '' : 'on'}" data-lim ${isOwner() ? '' : 'disabled'} aria-label="最悪ケース制限" aria-pressed="${!S.ledger.override}" style="margin-left:auto"></button></div>`;
-  return `<div class="bigring">${ringSVG(132, 56, 10, pct, 0)}<div class="c"><b>${fmtPct(pct)}%</b><span>${fmtUSD(usd(used))} / $${usd(S.cap)}</span></div></div><div class="stack">${stack}</div>${rows}<div style="height:1px;background:var(--line);margin:4px 10px"></div>${lim}`;
+  const left = Math.max(0, 100 - pct), warn = pct >= 80 ? 'bad' : pct >= 50 ? 'hot' : '';
+  return `<div class="gwrap ${warn}"><div class="gws" data-gauge data-size="212"></div><div class="gc">${ic('bolt', 'sm')}<span class="dm">${fmtPct(left)}%</span></div></div>
+  <div class="grow2"><div class="amt">${dm(fmtUSD(Math.max(0, usd(S.cap) - usd(used))))}<small>/ ${dm('$' + usd(S.cap))}</small></div><div class="thr"><span class="${pct >= 50 ? 'hit' : ''}">${ic('alert', 'sm')}${dm('50')}</span><span class="${pct >= 80 ? 'hit bad' : ''}">${ic('alert', 'sm')}${dm('80')}</span></div></div>
+  <div class="stack">${stack}</div>${rows}<div style="height:1px;background:var(--line);margin:4px 10px"></div>${lim}`;
 }
 document.addEventListener('click', (e) => {
   const m = e.target.closest('[data-model]');
@@ -429,7 +441,7 @@ function renderAtts() {
   $('#atts').innerHTML = S.atts.map((a) => {
     const pc = pctOf(a.tokens * price);
     const th = a.thumb ? `<img src="${a.thumb}" alt="">` : ic(a.kind === 'image' ? 'image' : 'doc');
-    const info = a.status === 'counting' ? '<span class="sk"></span>' : `<span>${fmtTok(a.tokens)} tok &nbsp;+${fmtPct(pc)}%${a.pages ? ' &nbsp;' + a.pages + 'p' : ''}</span>`;
+    const info = a.status === 'counting' ? '<span class="sk"></span>' : `<span>${dm(fmtTok(a.tokens))} tok &nbsp;${dm('+' + fmtPct(pc) + '%')}${a.pages ? ' &nbsp;' + a.pages + 'p' : ''}</span>`;
     const html = `<div class="att" data-id="${a.id}" ${a.isNew ? '' : 'style="animation:none"'}><span class="th">${th}</span><span class="ai"><b>${esc(a.name)}</b>${info}</span><button class="ib sm" data-rm="${a.id}" aria-label="削除">${ic('x', 'sm')}</button></div>`;
     a.isNew = false; return html;
   }).join('');
@@ -514,7 +526,7 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
   }
   const body = el.querySelector('.ai-body');
   S.streaming = true; const ctl = new AbortController(); S.abort = ctl; renderSend(); renderMeter();
-  body.innerHTML = '<div class="think"><span class="aura"><i></i></span><span class="tx">考え中</span></div>'; el.querySelector('.think-slot')?.replaceChildren(); scrollEnd(true);
+  S.phase = 'think'; body.innerHTML = thkHTML('推論中'); Orb.scan(body); orbSync(); el.querySelector('.think-slot')?.replaceChildren(); scrollEnd(true);
   if (mode !== 'compact') { $('#pvLive').classList.add('on'); renderPvBtn(); }
 
   const outPrice = (S.models[k]?.out || 10000);
@@ -546,7 +558,7 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
         if (mode === 'chat' || mode === 'edit') if (!chat.id) { chat.id = data.chatId; S.chats.unshift({ id: data.chatId, title: data.title, updated: Date.now() }); renderList(); }
         if (data.overridden) toast('残額に合わせて出力を ' + fmtTok(data.maxTokens) + ' トークンまでに絞りました', 'unlock', 'warn');
       } else if (ev === 'status') {
-        ai.meta.searches = data.n; body.innerHTML = '<div class="srch">' + ic('globe', 'sm') + '<span>検索中</span></div>';
+        ai.meta.searches = data.n; body.innerHTML = thkHTML('検索中'); Orb.scan(body);
       } else if (ev === 'sources') {
         ai.meta.sources = data.items; if (!raf) raf = requestAnimationFrame(paint);
       } else if (ev === 'think') {
@@ -554,7 +566,7 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
       } else if (ev === 'cite') {
         (ai.meta.cites = ai.meta.cites || []).push([data.at, data.i]);
       } else if (ev === 'text') {
-        ai.text += data.t; if (!raf) raf = requestAnimationFrame(paint);
+        if (S.phase !== 'speak') { S.phase = 'speak'; orbSync(); } ai.text += data.t; if (!raf) raf = requestAnimationFrame(paint);
       } else if (ev === 'done') serverDone = data;
       else if (ev === 'error') failure = data;
     }
@@ -562,7 +574,7 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
     if (e.name !== 'AbortError') failure = failure || { message: e.message, notSent: !gotMeta };
   }
   cancelAnimationFrame(raf);
-  S.live = 0; S.streaming = false; S.abort = null; $('#pvLive').classList.remove('on');
+  S.live = 0; S.streaming = false; S.phase = null; S.abort = null; $('#pvLive').classList.remove('on'); orbSync();
 
   if (!gotMeta && failure) {
     // 送信前に弾かれた: 画面を元に戻す
@@ -601,7 +613,7 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
 function renderThread() {
   const t = $('#thread'), c = S.chat;
   if (!c || !c.msgs.length) {
-    t.innerHTML = `<div class="empty"><div class="orb-wrap"><div class="orb big"></div></div><div class="sugg"><button class="sg" data-sg="html">${ic('code')}HTML</button><button class="sg" data-sg="web">${ic('globe')}Web</button><button class="sg" data-sg="file">${ic('clip')}ファイル</button></div></div>`; return;
+    t.innerHTML = `<div class="empty"><div class="orb-wrap"><canvas data-orb="hero" data-size="132"></canvas></div><div class="sugg"><button class="sg" data-sg="html">${ic('code')}HTML</button><button class="sg" data-sg="web">${ic('globe')}Web</button><button class="sg" data-sg="file">${ic('clip')}ファイル</button></div></div>`; Orb.scan(t); return;
   }
   t.innerHTML = '';
   c.msgs.forEach((m) => { if (m.role === 'user') t.insertAdjacentHTML('beforeend', userHTML(m)); else { const el = isSum(m) ? addSumDOM(m, true) : addAiDOM(m, true); renderAiBody(el.querySelector('.ai-body'), m, false); finishAiDOM(el, m, true); } });
@@ -686,19 +698,18 @@ function updateThink(el, m, streaming) {
   const slot = el && el.querySelector('.think-slot'); if (!slot) return;
   const t = (m.meta && m.meta.think) || '';
   let box = slot.querySelector('.think-box');
+  const thinking = streaming && !m.text;
+  if (thinking) { const tc = el.querySelector('.thk .tc'); if (tc && t) tc.textContent = t.replace(/\s+/g, ' ').trim().slice(-240); if (box) box.remove(); return; }
   if (!t) { if (box) box.remove(); return; }
   if (!box) {
     box = document.createElement('details'); box.className = 'think-box';
     box.innerHTML = `<summary>${ic('bulb', 'sm')}<span class="tl"></span><svg class="i sm chev"><use href="#i-chev"/></svg></summary><div class="tb"></div>`;
     box.querySelector('summary').addEventListener('click', () => { box.dataset.user = '1'; });
     slot.appendChild(box);
-    if (streaming) box.open = true;
   }
-  const thinking = streaming && !m.text;
-  box.querySelector('.tl').textContent = thinking ? '考え中' : '思考';
-  box.classList.toggle('live', thinking);
-  const tb = box.querySelector('.tb'); if (tb.textContent !== t) { tb.textContent = t; if (thinking) tb.scrollTop = tb.scrollHeight; }
-  if (!thinking && box.open && !box.dataset.user) box.open = false; // 答えが出始めたら畳む(自分で開いたものは残す)
+  box.querySelector('.tl').textContent = '思考';
+  box.classList.remove('live');
+  const tb = box.querySelector('.tb'); if (tb.textContent !== t) tb.textContent = t;
 }
 function renderAiBody(body, m, streaming) {
   const el = body.closest('.msg'); updateThink(el, m, streaming);
@@ -714,7 +725,7 @@ function finishAiDOM(el, m, quiet) {
   el.querySelector('.srcs-slot').innerHTML = src ? `<div class="srcs">${src}</div>` : '';
   const last = !!S.chat && S.chat.msgs[S.chat.msgs.length - 1] === m && !m.compacted && !isSum(m) && !S.streaming;
   const tags = [];
-  if (meta.cost != null) tags.push(`<span class="tg">${ic(MODELS[m.model || 'sonnet'].icon, 'sm')}${fmtUSD(usd(meta.cost))}<span>${fmtPct(meta.pct ?? pctOf(meta.cost))}%</span></span>`);
+  if (meta.cost != null) tags.push(`<span class="tg">${ic(MODELS[m.model || 'sonnet'].icon, 'sm')}${dm(fmtUSD(usd(meta.cost)))}<span>${dm(fmtPct(meta.pct ?? pctOf(meta.cost)) + '%')}</span></span>`);
   if (meta.searches) tags.push(`<span class="tg">${ic('globe', 'sm')}${meta.searches}</span>`);
   if (meta.stopped) tags.push(`<span class="tg" title="停止">${ic('stop', 'sm')}</span>`);
   if (meta.truncated) tags.push(`<span class="tg bad" title="最大出力に達して途中で終わりました">${ic('tok', 'sm')}</span>`);
@@ -746,7 +757,7 @@ function regenPopHTML() {
   const rq = S.rq;
   if (!rq || !rq.models) return `<div class="sb-empty">${rq && rq.err ? esc(rq.err) : '<span class="sk w"></span>'}</div>`;
   const rows = MODEL_KEYS.map((k) => { const m = MODELS[k], q = rq.models[k], ok = q.gate.ok;
-    return `<button class="mrow ${ok ? '' : 'off'}" data-rg="${k}" ${ok ? '' : 'disabled'}><span class="mi ${k}">${ic(m.icon)}</span><span class="nm"><b>${m.name}</b><span>${priceLabel(k)}</span></span><span class="rt"><span class="v">+${fmtPct(pctOf(q.expectedNano))}%</span><span class="v2">最大 ${fmtPct(pctOf(q.worstNano))}%</span></span></button>`; }).join('');
+    return `<button class="mrow ${ok ? '' : 'off'}" data-rg="${k}" ${ok ? '' : 'disabled'}><span class="mi ${k}">${ic(m.icon)}</span><span class="nm"><b>${m.name}</b><span>${priceLabel(k)}</span></span><span class="rt"><span class="v">${dm('+' + fmtPct(pctOf(q.expectedNano)) + '%')}</span><span class="v2">${ic('bolt', 'sm')}${dm(fmtPct(pctOf(q.worstNano)) + '%')}</span></span></button>`; }).join('');
   const foot = S.config.permission === 'auto' ? '' : `<div class="pfoot"><button class="tog ${rq.search ? 'on' : ''}" data-rgs aria-pressed="${rq.search}" aria-label="Web検索">${ic('globe')}<sup>${S.config.searchUnlimited ? '∞' : S.searchMax}</sup></button></div>`;
   return rows + foot;
 }
@@ -988,10 +999,10 @@ const TABS = {
   async budget() {
     const used = S.ledger.spent, pct = pctOf(used), c = S.config;
     return `<div class="m-title">${ic('gauge', 'sm')}予算</div><div class="group">
-      ${row(ic('lock') + '<span>上限</span>', '$' + usd(S.cap).toFixed(2) + ' 固定')}
-      ${row(ic('gauge') + '<span>使用</span>', fmtUSD(usd(used)) + ' · ' + fmtPct(pct) + '%')}
+      ${row(ic('lock') + '<span>上限</span>', dm('$' + usd(S.cap).toFixed(2)) + ' 固定')}
+      ${row(ic('gauge') + '<span>使用</span>', dm(fmtUSD(usd(used)) + ' · ' + fmtPct(pct) + '%'))}
       <div class="row"><div class="lb">${ic('reset')}<span>リセット</span></div><button class="btn dng" data-reset>${ic('reset', 'sm')}<span>使用額を0に</span></button></div>
-      ${S.syncAvailable ? `<div class="row"><div class="lb">${ic('gauge')}<span>Consoleの実額<small>${S.syncRes ? 'Console ' + fmtUSD(usd(S.syncRes.consoleNano)) + '(' + esc(S.syncRes.since) + '〜) / サイト ' + fmtUSD(usd(S.syncRes.siteNano)) : '管理用キーで集計を取得(読み取りのみ)'}</small></span></div><div class="val"><button class="btn" data-sync>取得</button>${S.syncRes ? `<button class="btn pri" data-apply-sync aria-label="この額に合わせる">${ic('check', 'sm')}</button>` : ''}</div></div>` : ''}
+      ${S.syncAvailable ? `<div class="row"><div class="lb">${ic('gauge')}<span>Consoleの実額<small>${S.syncRes ? 'Console ' + dm(fmtUSD(usd(S.syncRes.consoleNano))) + '(' + esc(S.syncRes.since) + '〜) / サイト ' + dm(fmtUSD(usd(S.syncRes.siteNano))) : '管理用キーで集計を取得(読み取りのみ)'}</small></span></div><div class="val"><button class="btn" data-sync>取得</button>${S.syncRes ? `<button class="btn pri" data-apply-sync aria-label="この額に合わせる">${ic('check', 'sm')}</button>` : ''}</div></div>` : ''}
       <div class="row"><div class="lb">${ic('edit')}<span>実額に合わせる<small>Console のコスト(USD)を入力</small></span></div><div class="val"><input class="n" style="width:86px" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.76" id="setSpent" aria-label="使用額(USD)"><button class="btn pri" data-setspent aria-label="反映">${ic('check', 'sm')}</button></div></div></div>
       <div class="group"><div class="row"><div class="lb">${ic(S.ledger.override ? 'unlock' : 'shield')}<span>最悪ケース制限<small>${S.ledger.override ? '解除中。出力は残額に収まるよう自動で絞られます' : '最大出力まで使った場合に残額を超える送信を止めます'}</small></span></div><button class="sw ${S.ledger.override ? '' : 'on'}" data-lim aria-label="最悪ケース制限"></button></div></div>
       <div class="m-title">${ic('sliders', 'sm')}動作</div><div class="group">
@@ -1004,7 +1015,7 @@ const TABS = {
   async models() {
     return `<div class="m-title">${ic('tok', 'sm')}最大出力(max_tokens)</div>` + MODEL_KEYS.map((k) => {
       const m = MODELS[k], info = S.models[k] || { in: 0, out: 0, recMax: 0 }, cur = S.maxTokens[k], wc = cur * info.out;
-      return `<div class="group"><div class="row"><div class="lb"><span class="mi ${k}" style="width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:#fff">${ic(m.icon, 'sm')}</span><span>${m.name}<small>$${info.in / 1000} / $${info.out / 1000} per 1M</small></span></div><div class="val" data-wc="${k}">${fmtUSD(usd(wc))} · ${fmtPct(pctOf(wc))}%</div></div>
+      return `<div class="group"><div class="row"><div class="lb"><span class="mi ${k}" style="width:30px;height:30px;border-radius:10px;display:grid;place-items:center;color:#fff">${ic(m.icon, 'sm')}</span><span>${m.name}<small>${dm('$' + info.in / 1000 + ' / $' + info.out / 1000)} per 1M</small></span></div><div class="val" data-wc="${k}">${dm(fmtUSD(usd(wc)) + ' · ' + fmtPct(pctOf(wc)) + '%')}</div></div>
       <div class="row" style="justify-content:flex-end"><div class="seg3" data-mt="${k}">${S.presets.map((p) => `<button data-v="${p}" class="${p === cur ? 'on' : ''} ${p === info.recMax ? 'rec' : ''}">${fmtK(p)}</button>`).join('')}</div></div></div>`;
     }).join('') + `<div class="lkc" style="width:max-content"><span style="width:7px;height:7px;border-radius:50%;background:var(--good);display:inline-block"></span>推奨</div>`;
   },
@@ -1062,7 +1073,7 @@ function bindTab(main, redraw) {
       if (mt) {
         const k = mt.parentElement.dataset.mt; const r = await req('/settings', { method: 'PUT', body: { maxTokens: { [k]: +mt.dataset.v } } }); S.maxTokens = r.maxTokens;
         mt.parentElement.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b === mt));
-        const wc = S.maxTokens[k] * (S.models[k]?.out || 0); main.querySelector(`[data-wc="${k}"]`).textContent = fmtUSD(usd(wc)) + ' · ' + fmtPct(pctOf(wc)) + '%'; recount(true);
+        const wc = S.maxTokens[k] * (S.models[k]?.out || 0); main.querySelector(`[data-wc="${k}"]`).innerHTML = dm(fmtUSD(usd(wc)) + ' · ' + fmtPct(pctOf(wc)) + '%'); recount(true);
       }
       if (q('[data-adduser]')) {
         const n = $('#nuName').value.trim(), p = $('#nuPass').value;
