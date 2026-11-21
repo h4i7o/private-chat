@@ -1017,11 +1017,26 @@ addEventListener('resize', () => { setSeg('#pvMode'); setSeg('#pvDev'); });
 
 /* ---------- 設定 ---------- */
 function closeModal() { const m = $('.modal-bg:not(.out)'); if (!m) return; m.classList.add('out'); tabSync(); setTimeout(() => { m.remove(); }, 380); }
+/* segmented controls: a single thumb slides to the active button */
+function segSync(seg) {
+  const on = seg.querySelector('button.on'); if (!on || !on.offsetWidth) return;
+  const first = !seg._r; if (first) seg.classList.add('nt');
+  seg.style.setProperty('--x', on.offsetLeft + 'px'); seg.style.setProperty('--w', on.offsetWidth + 'px');
+  if (first) { seg._r = 1; requestAnimationFrame(() => requestAnimationFrame(() => seg.classList.remove('nt'))); }
+}
+(function () {
+  let q = 0; const run = () => { q = 0; document.querySelectorAll('.seg3').forEach(segSync); };
+  const kick = () => { if (!q) q = requestAnimationFrame(run); };
+  new MutationObserver(kick).observe($('#layer'), { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+  addEventListener('resize', kick);
+  // optimistic: the thumb moves on tap, before the server answers
+  document.addEventListener('click', (e) => { const b = e.target.closest('.seg3 button'); if (!b || b.classList.contains('on')) return; const seg = b.parentElement; seg.querySelectorAll('button.on').forEach((x) => x.classList.remove('on')); b.classList.add('on'); segSync(seg); }, true);
+})();
 /* update the DOM in place so CSS transitions (toggle knobs, segmented controls) actually play */
 function morph(a, b) {
   if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
   for (const at of [...a.attributes]) if (!b.hasAttribute(at.name) && at.name !== 'style') a.removeAttribute(at.name);
-  for (const at of b.attributes) if (a.getAttribute(at.name) !== at.value && !(at.name === 'value' && a === document.activeElement)) a.setAttribute(at.name, at.value);
+  for (const at of b.attributes) { const v = at.name === 'class' && a.classList.contains('ready') ? at.value + ' ready' : at.value; if (a.getAttribute(at.name) !== v && !(at.name === 'value' && a === document.activeElement)) a.setAttribute(at.name, v); }
   if (a.tagName === 'INPUT' && a !== document.activeElement && a.type !== 'password') { if (a.value !== b.getAttribute('value') && b.hasAttribute('value')) a.value = b.getAttribute('value'); }
   const ac = [...a.childNodes], bc = [...b.childNodes];
   bc.forEach((n, i) => {
@@ -1064,7 +1079,7 @@ const TABS = {
       ${row(ic('gauge') + '<span>Used</span>', dm(fmtUSD(usd(used)) + ' · ' + fmtPct(pct) + '%'))}
       <div class="row"><div class="lb">${ic('reset')}<span>Reset</span></div><button class="btn dng" data-reset>${ic('reset', 'sm')}<span>Reset usage</span></button></div>
       ${S.syncAvailable ? `<div class="row"><div class="lb">${ic('gauge')}<span>Console actual<small>${S.syncRes ? 'Console ' + dm(fmtUSD(usd(S.syncRes.consoleNano))) + '(' + esc(S.syncRes.since) + '~) / Site ' + dm(fmtUSD(usd(S.syncRes.siteNano))) : 'Fetch totals with the admin key (read-only)'}</small></span></div><div class="val"><button class="btn" data-sync>Fetch</button>${S.syncRes ? `<button class="btn pri" data-apply-sync aria-label="Apply this amount">${ic('check', 'sm')}</button>` : ''}</div></div>` : ''}
-      <div class="row"><div class="lb">${ic('edit')}<span>Set actual<small>Enter the Console cost (USD)</small></span></div><div class="val"><input class="n" style="width:86px" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.76" id="setSpent" aria-label="Usage (USD)"><button class="btn pri" data-setspent aria-label="Apply">${ic('check', 'sm')}</button></div></div></div>
+      <div class="row"><div class="lb">${ic('edit')}<span>Set actual<small>Enter the Console cost (USD)</small></span></div><div class="val"><input class="n" style="width:86px" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="0.76" id="setSpent" aria-label="Usage (USD)"><button class="btn pri" data-setspent aria-label="Apply">${ic('check', 'sm')}</button></div></div></div>
       <div class="group"><div class="row"><div class="lb">${ic(S.ledger.override ? 'unlock' : 'shield')}<span>Worst-case limit<small>${S.ledger.override ? 'Off. Output is trimmed to fit the balance' : 'Blocks sends whose worst case exceeds the balance'}</small></span></div><button class="sw ${S.ledger.override ? '' : 'on'}" data-lim aria-label="Worst-case limit"></button></div></div>
       <div class="m-title">${ic('sliders', 'sm')}Behavior</div><div class="group">
       <div class="row"><div class="lb">${ic('sliders')}<span>Effort</span></div><div class="seg3" data-cfg="effortMode"><button data-v="fixed" class="${c.effortMode === 'fixed' ? 'on' : ''}">Fixed Med</button><button data-v="select" class="${c.effortMode === 'select' ? 'on' : ''}">Low · Med · High</button></div></div>
@@ -1107,7 +1122,8 @@ const TABS = {
   },
 };
 function bindTab(main, redraw) {
-  const fail = (x) => { const er = $('#uErr'); if (er) { er.textContent = x.message; er.classList.add('on'); } shake(main); };
+  const fail = (x) => { const er = $('#uErr'); if (er) { er.textContent = x.message; er.classList.add('on'); } else toast(x.message, 'alert', 'warn'); shake(main); };
+  main.onkeydown = (e) => { if (e.key === 'Enter' && e.target.id === 'setSpent') { e.preventDefault(); main.querySelector('[data-setspent]').click(); } };
   main.onclick = async (e) => {
     const q = (s) => e.target.closest(s);
     try {
@@ -1118,9 +1134,9 @@ function bindTab(main, redraw) {
         else { S.ledger = (await req('/ledger/reset', { method: 'POST' })).ledger; renderBudget(); recount(true); redraw(); toast('Usage reset', 'reset'); }
       }
       if (q('[data-setspent]')) {
-        const v = parseFloat($('#setSpent').value);
+        const v = parseFloat(String($('#setSpent').value).normalize('NFKC').replace(/[,，]/g, '.').replace(/[^0-9.]/g, ''));
         if (!Number.isFinite(v) || v < 0) throw new Error('Enter an amount');
-        S.ledger = (await req('/ledger/set', { method: 'POST', body: { usd: v } })).ledger; renderBudget(); recount(true); redraw(); toast('Usage set to $' + v.toFixed(2), 'check');
+        S.ledger = (await req('/ledger/set', { method: 'POST', body: { usd: v } })).ledger; renderBudget(); recount(true); $('#setSpent').value = ''; redraw(); toast('Usage set to $' + v.toFixed(2), 'check');
       }
       if (q('[data-sync]')) { S.syncRes = await req('/ledger/sync', { method: 'POST', body: {} }); redraw(); }
       if (q('[data-apply-sync]') && S.syncRes) {
@@ -1191,7 +1207,20 @@ const COARSE = matchMedia('(hover:none) and (pointer:coarse)').matches; // タ�
     if (document.activeElement === input || !e.cancelable) return;
     e.preventDefault(); input.focus({ preventScroll: true }); const n = input.value.length; try { input.setSelectionRange(n, n); } catch { /* */ }
   }, { passive: false });
+  // when the field loses focus the keyboard is on its way out: start growing back right away instead of waiting for the late resize event
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      const a = document.activeElement; if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName)) return;
+      root.classList.remove('kb'); root.style.setProperty('--app-h', Math.max(maxH, innerHeight) + 'px');
+      setTimeout(fit, 700);
+    }, 30);
+  });
   input.addEventListener('focus', () => { window.scrollTo(0, 0); [60, 220].forEach((ms) => setTimeout(() => { window.scrollTo(0, 0); fit(); }, ms)); });
+  document.addEventListener('focusout', () => setTimeout(() => {
+    const a = document.activeElement; if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
+    if (!root.classList.contains('kb')) return;
+    root.style.setProperty('--app-h', Math.max(maxH, innerHeight) + 'px'); root.classList.remove('kb');
+  }, 30));
   if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', () => { window.scrollTo(0, 0); fit(); }); }
   addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 250)); fit();
   const sc = document.querySelector('#scroll'); let pinned = true;

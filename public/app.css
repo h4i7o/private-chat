@@ -1047,3 +1047,41 @@ html,:root:not([data-theme="light"]),:root[data-theme="dark"]{background-repeat:
   .top .ib .i{width:19px;height:19px}
   .scroll{padding-top:calc(72px + var(--sat))}
 }
+
+/* ======================================================================
+   v10: one flat base colour from edge to edge. Browser bars extend that colour,
+   so the light lives in the middle of the page and fades out before the top and bottom edges.
+   ====================================================================== */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--base:#0b0b0c;--glowc:rgba(160,160,166,.62)}}
+:root[data-theme="dark"]{--base:#0b0b0c;--glowc:rgba(160,160,166,.62)}
+:root{--base:#e5e5e9;--glowc:rgba(255,255,255,.95)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--base:#0b0b0c;--glowc:rgba(160,160,166,.62)}}
+:root[data-theme="dark"]{--base:#0b0b0c;--glowc:rgba(160,160,166,.62)}
+:root[data-theme="light"]{--base:#e5e5e9;--glowc:rgba(255,255,255,.95)}
+html,:root:not([data-theme="light"]),:root[data-theme="dark"],:root[data-theme="light"],body{background:radial-gradient(100% 34% at 100% 66%,var(--glowc),transparent 100%),radial-gradient(70% 22% at 0% 24%,color-mix(in srgb,var(--glowc) 22%,transparent),transparent 100%),var(--base) no-repeat;background-size:100% 100%}
+.bgfx{background:none}.bgfx i{display:none}
+.bgfx::after{opacity:.045}
+
+/* the header area fades the text out under the chips */
+.scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0,transparent calc(var(--sat) + 4px),#000 calc(var(--sat) + 64px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52));mask-image:linear-gradient(to bottom,transparent 0,transparent calc(var(--sat) + 4px),#000 calc(var(--sat) + 64px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52))}
+
+/* segmented control: one thumb that slides */
+.seg3::before{content:"";position:absolute;top:3px;bottom:3px;left:0;width:var(--w,0px);transform:translate3d(var(--x,0px),0,0);border-radius:9px;background:var(--surface);box-shadow:var(--shadow-sm);transition:transform .5s var(--ease),width .5s var(--ease);pointer-events:none}
+.seg3.nt::before{transition:none}
+.seg3 button.on{background:none;box-shadow:none}
+.pop .pfoot .seg3::before{top:2px;bottom:2px;border-radius:7px}
+.seg3 button.on{background:none!important;box-shadow:none!important}
+.seg3::before{background:linear-gradient(180deg,#fff,#dcdce1)}
+:root[data-theme="light"] .seg3::before{background:linear-gradient(180deg,#34343a,#111113)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .seg3::before{background:linear-gradient(180deg,#34343a,#111113)}}
+
+/* ======================================================================
+   v10b: the page fades into the browser bars' own colour at both edges; cleaner header zone
+   ====================================================================== */
+:root{--edge:#f2f2f7}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--edge:#1c1b20}}
+:root[data-theme="dark"]{--edge:#1c1b20}
+:root[data-theme="light"]{--edge:#f2f2f7}
+.bgfx{z-index:-1}
+body::before{display:block;content:"";position:fixed;top:0;left:0;right:0;bottom:0;width:auto;height:auto;z-index:0;pointer-events:none;border-radius:0;filter:none;animation:none;-webkit-mask-image:none;mask-image:none;background-size:auto;background-image:linear-gradient(to bottom,var(--edge) 0,transparent 60px),linear-gradient(to top,var(--edge) 0,color-mix(in srgb,var(--edge) 70%,transparent) 14px,transparent 110px)}
+.scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0,transparent calc(var(--sat) + 44px),#000 calc(var(--sat) + 92px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52));mask-image:linear-gradient(to bottom,transparent 0,transparent calc(var(--sat) + 44px),#000 calc(var(--sat) + 92px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52))}
