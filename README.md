@@ -165,3 +165,5 @@ npm run deploy
 3. 以降は GitHub に反映(push / Webで編集の Commit)するたびに自動でデプロイされる。結果は同じ画面の Builds で見られる。失敗したビルドは公開中の版を置き換えない。
 4. APIキーなどのシークレットは Worker の Settings → Variables and Secrets に残ったまま。管理用キー(任意)もここの Add → Secret で `ANTHROPIC_ADMIN_KEY` として追加できる。
 5. メモリの表は初回アクセス時に自動で作られるため、データベースの移行作業は不要。
+
+y
