@@ -54,6 +54,7 @@ function reply(body) {
   if (t.startsWith('ここまでの会話を')) return '## 要約(モック)\n- 会話の要点: ' + (body.messages ?? []).filter((m) => m.role === 'user').length + ' 件のやり取り\n- 続きはここから再開できます';
   const attach = (body.messages ?? []).at(-1)?.content?.filter?.((b) => b.type !== 'text').length ?? 0;
   if (/html|ページ|時計|作って/i.test(t)) return '作成しました。\n\n```html\n' + HTML_DEMO + '\n```\n\n変更したい点があれば送ってください。';
+  if (/ファイル作成|file card/i.test(t)) return 'ファイルを作りました。\n\n```python file=solve.py\n' + Array.from({ length: 24 }, (_, i) => `# line ${i + 1}\nprint(${i})`).join('\n') + '\n```\n\nメモも付けます。\n\n```markdown file=memo.md\n# メモ\n\n- 項目A\n- 項目B\n\n**太字**のテスト\n```\n\n短い断片は普通のブロックです。\n\n```js\nconsole.log(1)\n```';
   if (/数式|math/i.test(t)) return '二次方程式の解は $x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}$ です。\n\n$$\\int_0^1 x^2\\,dx=\\frac13$$\n\n流れ図:\n\n```mermaid\nflowchart LR\n  A[入力] --> B{判定}\n  B -->|はい| C[出力]\n  B -->|いいえ| D[やり直し]\n```\n\n価格は$5と$10です。';
   if (/長文|long/i.test(t)) return 'これは長い応答のテストです。'.repeat(400);
   return [

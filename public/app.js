@@ -69,7 +69,7 @@ const S = {
   config: { effortMode: 'fixed', permission: 'manual', searchMax: 3, searchUnlimited: false, thinking: true }, effort: 'medium', mem: true, memCount: 0, syncAvailable: false, syncRes: null, rq: null, installEv: null,
   chats: [], chat: null, model: 'sonnet', search: false, atts: [], text: '',
   quotes: {}, edit: null, draft: null, counting: false, quoteErr: null, seq: 0, live: 0, streaming: false, abort: null, pop: null,
-  pv: { open: false, html: '', mode: 'preview', device: 'desktop', ready: false, pending: null, last: 0, errs: [], vi: -1 },
+  pv: { kind: 'html', name: '', file: null, open: false, html: '', mode: 'preview', device: 'desktop', ready: false, pending: null, last: 0, errs: [], vi: -1 },
 };
 { const mv = lsGet('pc.mem'); if (mv === '0') S.mem = false; }
 { const e = lsGet('pc.effort'); if (e === 'low' || e === 'medium' || e === 'high') S.effort = e; }
@@ -615,6 +615,8 @@ $('#thread').addEventListener('click', (e) => {
     S.text = input.value; autosize(); recount(true); input.focus(); return;
   }
   const ed = e.target.closest('[data-edit]'); if (ed) return startEdit(ed.dataset.edit);
+  const afc = e.target.closest('.afc');
+  if (afc) { const f = fileSrc.get(afc.dataset.k); if (!f) return; if (e.target.closest('[data-act="fdl"]')) return dlFile(f); return fileOpen(f); }
   const b = e.target.closest('[data-act]'); if (!b) return; const code = b.closest('.code');
   if (b.dataset.act === 'regen') return openRegen(b);
   if (b.dataset.act === 'ver') return switchVer(+b.dataset.d);
@@ -810,8 +812,24 @@ function protectMath(t, list) {
   return t;
 }
 const EXT = { javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', python: 'py', py: 'py', html: 'html', css: 'css', json: 'json', markdown: 'md', md: 'md', bash: 'sh', sh: 'sh', shell: 'sh', sql: 'sql', yaml: 'yml', yml: 'yml', xml: 'xml', csv: 'csv', jsx: 'jsx', tsx: 'tsx', java: 'java', c: 'c', cpp: 'cpp', go: 'go', rust: 'rs', ruby: 'rb', php: 'php', swift: 'swift', kotlin: 'kt', mermaid: 'mmd', text: 'txt' };
+EXT.svg = 'svg'; EXT.rs = 'rs'; EXT.txt = 'txt';
+const KIND = { html: 'HTML', md: 'ドキュメント', py: 'Python', js: 'JavaScript', ts: 'TypeScript', json: 'JSON', css: 'CSS', sh: 'シェル', sql: 'SQL', yml: 'YAML', svg: 'SVG', csv: 'CSV', jsx: 'JSX', tsx: 'TSX', java: 'Java', c: 'C', cpp: 'C++', go: 'Go', rs: 'Rust', rb: 'Ruby', php: 'PHP', swift: 'Swift', kt: 'Kotlin', xml: 'XML', txt: 'テキスト' };
+const fileSrc = new Map();
+function fileInfo(lang, info) {
+  const m = /(?:file(?:name)?|title|name)\s*=\s*["']?([^"'\s]+)/i.exec(info || '') || /^\s*([\w.-]+\.[A-Za-z0-9]{1,6})\s*$/.exec(info || '');
+  const name = m ? m[1].replace(/[\\/:*?"<>|]/g, '_').slice(0, 80) : '';
+  const l = lang.toLowerCase(), ext = (name.includes('.') ? name.split('.').pop() : (EXT[l] || (/^[a-z0-9]{1,5}$/.test(l) ? l : 'txt'))).toLowerCase();
+  return { name: name || ({ html: 'page', md: 'document' }[ext] || 'code') + '.' + ext, ext, named: !!name };
+}
 const hash = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
 const mmdSrc = new Map(), mmdSvg = new Map();
+function asCardFor(lang, info, code) {
+  const l = lang.toLowerCase(); if (l === 'mermaid') return false;
+  const n = code ? code.replace(/\n$/, '').split('\n').length : 0;
+  if (/(?:file(?:name)?|title|name)\s*=|^\s*[\w.-]+\.[A-Za-z0-9]{1,6}\s*$/i.test(info || '')) return true;
+  if (['html', 'svg', 'markdown', 'md'].includes(l)) return n >= 8;
+  return n >= 25;
+}
 function md(src, cites, sources) {
   // 引用: 本文の該当位置に目印を差し込み、整形後に番号つきのリンクへ置き換える
   if (cites && cites.length) {
@@ -819,14 +837,19 @@ function md(src, cites, sources) {
     for (const at of [...by.keys()].sort((a, b) => b - a)) { if (at > src.length) continue; src = src.slice(0, at) + '\uE020' + by.get(at).map((i) => i + 1).join(',') + '\uE021' + src.slice(at); }
   }
   const math = [];
-  const re = /```([\w-]*)\n?([\s\S]*?)(```|$)/g; let last = 0, m, out = '';
+  const re = /```([\w+#-]*)([^\n`]*)\n?([\s\S]*?)(```|$)/g; let last = 0, m, out = '';
   const text = (t) => para(protectMath(t, math));
   while ((m = re.exec(src))) {
     if (m.index > last) out += text(src.slice(last, m.index));
-    const lang = m[1] || 'text', open = m[3] !== '```', code = m[2].replace(/\uE020[\d,]+\uE021/g, '');
+    const lang = m[1] || 'text', info = m[2], open = m[4] !== '```', code = m[3].replace(/\uE020[\d,]+\uE021/g, '');
     if (lang === 'mermaid' && !open) {
       const k = hash(code); mmdSrc.set(k, code);
       out += `<div class="code mmd" data-lang="mermaid" data-k="${k}"><div class="code-h">${ic('layers', 'sm')}<span>図</span><span class="grow"></span><button class="ib sm" data-act="mmd" aria-label="コードを表示">${ic('doc', 'sm')}</button><button class="ib sm" data-act="copy" aria-label="コピー">${ic('copy', 'sm')}</button></div><div class="mmd-v">${mmdSvg.get(k) || '<span class="sk w"></span>'}</div><pre hidden><code>${esc(code)}</code></pre></div>`;
+    } else if (asCardFor(lang, info, code)) {
+      const fi = fileInfo(lang, info), n = code ? code.replace(/\n$/, '').split('\n').length : 0, k = hash(fi.name + '\u0000' + code);
+      if (fileSrc.size > 300) fileSrc.clear();
+      fileSrc.set(k, { name: fi.name, ext: fi.ext, lang: lang.toLowerCase(), code });
+      out += `<div class="afc ${open ? 'live' : ''}" data-k="${k}" role="button" tabindex="0" aria-label="${esc(fi.name)}を開く"><span class="afi"><span>${esc(fi.ext.slice(0, 4))}</span></span><span class="afm"><b>${esc(fi.name)}</b><small>${esc(KIND[fi.ext] || fi.ext.toUpperCase())} · ${n}行${open ? ' · 作成中' : ''}</small></span><span class="afa"><button class="ib sm" data-act="fdl" aria-label="ダウンロード">${ic('download', 'sm')}</button><svg class="i sm chv"><use href="#i-chevr"/></svg></span></div>`;
     } else {
       const n = code ? code.replace(/\n$/, '').split('\n').length : 0;
       out += `<div class="code ${open ? 'open' : ''}" data-lang="${esc(lang)}"><div class="code-h"><span>${esc(lang)}</span>${n > 5 ? `<span class="ln">${n}行</span>` : ''}<span class="grow"></span>${lang === 'html' ? `<button class="ib sm" data-act="pv" aria-label="プレビュー">${ic('eye', 'sm')}</button>` : ''}<button class="ib sm" data-act="dl" aria-label="ファイルとして保存">${ic('download', 'sm')}</button><button class="ib sm" data-act="copy" aria-label="コピー">${ic('copy', 'sm')}</button></div><pre><code>${esc(code)}</code></pre></div>`;
@@ -857,7 +880,7 @@ function rerenderAll() {
   if (!S.chat || S.streaming) return;
   S.chat.msgs.forEach((m) => { if (m.role !== 'ai') return; const el = $('#thread').querySelector(`.msg.ai[data-id="${m.id}"]`); if (el) renderAiBody(el.querySelector('.ai-body'), m, false); });
 }
-function extractHtml(t) { const all = [...t.matchAll(/```html\s*\n([\s\S]*?)(```|$)/g)]; const l = all[all.length - 1]; return l ? { html: l[1], done: l[2] === '```' } : null; }
+function extractHtml(t) { const all = [...t.matchAll(/```html[^\n`]*\n([\s\S]*?)(```|$)/g)]; const l = all[all.length - 1]; return l ? { html: l[1], done: l[2] === '```' } : null; }
 
 /* ---------- ライブプレビュー(/preview を sandbox で読み込み、postMessage で描画) ---------- */
 function pvEnsureFrame() {
@@ -873,7 +896,7 @@ addEventListener('message', (e) => {
 });
 function pvPost(msg) { if (msg.scripts && msg.force) { S.pv.errs = []; renderPvErr(); } const f = $('#pvFrame iframe'); if (!f) return; if (S.pv.ready) f.contentWindow.postMessage(msg, '*'); else S.pv.pending = msg; }
 function pvStream(html, done, final) {
-  S.pv.html = html; $('#pvCode').textContent = html;
+  if (S.pv.kind !== 'html') pvKind('html'); S.pv.html = html; $('#pvCode').textContent = html;
   if (!S.pv.open && innerWidth >= 1000) pvShow();
   if (!S.pv.open) { renderPvBtn(); return; }
   if (final) { pvPost({ html, scripts: true, force: true }); renderPvVer(); return; }
@@ -881,10 +904,27 @@ function pvStream(html, done, final) {
   pvPost({ html, scripts: false });
 }
 function pvShow() { renderPvVer(); pvEnsureFrame(); S.pv.open = true; $('#shell').classList.add('pv-open'); if (innerWidth <= 900) $('#shell').classList.remove('sb-open'); setSeg('#pvMode'); setSeg('#pvDev'); renderPvBtn(); }
-function pvOpen(html, vi) {
-  S.pv.html = html; $('#pvCode').textContent = html;
+function pvOpen(html, vi, name) {
+  pvKind('html', name); S.pv.html = html; $('#pvCode').textContent = html;
   if (vi === undefined) vi = htmlVersions().findIndex((x) => x.html === html);
   S.pv.vi = vi; pvShow(); pvPost({ html, scripts: true, force: true });
+}
+function dlFile(f) { dlBlob(new Blob([f.code], { type: 'text/plain;charset=utf-8' }), f.name); }
+function pvKind(kind, name, f) {
+  S.pv.kind = kind; S.pv.name = name || ''; S.pv.file = f || null;
+  const md_ = kind === 'file' && f && f.ext === 'md';
+  $('#pvStage').classList.toggle('is-file', kind === 'file'); $('#pvStage').classList.toggle('is-md', !!md_);
+  $('#pvDev').hidden = kind === 'file'; $('#pvMode').hidden = kind === 'file' && !md_;
+  const nm = $('#pvName'); nm.hidden = !name; nm.textContent = name || '';
+  if (kind === 'file') { S.pv.mode = md_ ? 'preview' : 'code'; $('#pvMode').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.m === S.pv.mode)); $('#pvStage').classList.toggle('is-code', S.pv.mode === 'code'); }
+  else { $('#pvStage').classList.toggle('is-code', S.pv.mode === 'code'); }
+  $('#pvDl').setAttribute('aria-label', kind === 'file' ? 'ファイルを保存' : 'HTMLを保存');
+}
+function fileOpen(f) {
+  if (f.ext === 'html' || f.lang === 'html') { const i = htmlVersions().findIndex((x) => x.html === f.code); return pvOpen(f.code, i, f.name); }
+  pvKind('file', f.name, f); S.pv.html = f.code; $('#pvCode').textContent = f.code;
+  if (f.ext === 'md') $('#pvDoc').innerHTML = md(f.code);
+  pvShow(); setSeg('#pvMode'); $('#pvVer').hidden = true;
 }
 function pvClose() { S.pv.open = false; $('#shell').classList.remove('pv-open'); renderPvBtn(); }
 function latestHtml() { const c = S.chat; if (!c) return null; for (let i = c.msgs.length - 1; i >= 0; i--) { const m = c.msgs[i]; if (m.role === 'ai') { const h = extractHtml(m.text); if (h && h.done) return h.html; } } return null; }
@@ -900,9 +940,11 @@ function renderPvErr() {
 }
 function renderPvBtn() { const b = $('#btnPv'); b.classList.toggle('on', S.pv.open); b.style.display = (S.pv.open || latestHtml() || S.streaming) ? '' : 'none'; renderPvVer(); }
 function pvStep(d) { const v = htmlVersions(); const i = Math.max(0, Math.min(v.length - 1, (S.pv.vi < 0 ? v.length - 1 : S.pv.vi) + d)); if (v[i]) pvOpen(v[i].html, i); }
+$('#thread').addEventListener('keydown', (e) => { const c = e.target.closest && e.target.closest('.afc'); if (c && c === e.target && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); c.click(); } });
 $('#pvPrev').onclick = () => pvStep(-1); $('#pvNext').onclick = () => pvStep(1);
 $('#pvDl').onclick = () => {
   if (!S.pv.html) return;
+  if (S.pv.kind === 'file' && S.pv.file) return dlFile(S.pv.file);
   const full = /<html[\s>]/i.test(S.pv.html) ? S.pv.html : '<!DOCTYPE html>\n<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>\n' + S.pv.html + '\n</body></html>';
   dlBlob(new Blob([full], { type: 'text/html' }), 'page' + (S.pv.vi >= 0 ? '-v' + (S.pv.vi + 1) : '') + '.html');
 };

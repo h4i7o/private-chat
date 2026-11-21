@@ -18,7 +18,8 @@ const enc = new TextEncoder();
 
 const SYSTEM_PROMPT =
   'あなたは簡潔で正確なアシスタントです。ユーザーの言語で答えてください。' +
-  'HTMLやUIの作成を頼まれたら、外部ファイルに依存しない完結した1つのHTMLを ```html のコードブロックで出力してください。';
+  'HTMLやUIの作成を頼まれたら、外部ファイルに依存しない完結した1つのHTMLを ```html のコードブロックで出力してください。' +
+  '約20行以上のコードや、そのまま保存して使う文書は、フェンスの言語のあとに file=名前.拡張子 を付けてください(例: ```python file=solve.py、```markdown file=memo.md、```html file=clock.html)。短い断片には付けません。';
 
 // メモリ(ユーザーが画面で書いたメモ)をシステムプロンプトに足す。送信ごとのスイッチで切り替えられる。
 const MEM_MAX_ITEMS = 50, MEM_MAX_CHARS = 300, MEM_MAX_TOTAL = 6000;
