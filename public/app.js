@@ -332,7 +332,7 @@ function renderSend() {
 }
 
 /* ---------- popovers ---------- */
-function closePop() { if (!S.pop) return; const p = S.pop; S.pop = null; setTimeout(tabSync, 0); p.el.classList.add('out'); p.el.style.pointerEvents = 'none'; if (window.gsap && !REDUCE) gsap.to(p.el, { opacity: 0, y: -6, scale: .98, duration: .24, ease: 'power2.inOut', onComplete: () => p.el.remove() }); else setTimeout(() => p.el.remove(), 210); if (p.anchor && p.anchor.setAttribute) p.anchor.setAttribute('aria-expanded', 'false'); }
+function closePop() { if (!S.pop) return; const p = S.pop; S.pop = null; setTimeout(tabSync, 0); p.el.classList.add('out'); p.el.style.pointerEvents = 'none'; setTimeout(() => p.el.remove(), 260); if (p.anchor && p.anchor.setAttribute) p.anchor.setAttribute('aria-expanded', 'false'); }
 function openPop(anchor, kind, build, { w = 340, align = 'left' } = {}) {
   if (S.pop && S.pop.kind === kind) { closePop(); return; }
   closePop();
@@ -340,7 +340,6 @@ function openPop(anchor, kind, build, { w = 340, align = 'left' } = {}) {
   const r = anchor.getBoundingClientRect(); let left = align === 'right' ? r.right - w : r.left; left = Math.max(12, Math.min(innerWidth - w - 12, left));
   el.style.left = left + 'px'; el.style.top = r.bottom + 8 + 'px'; el.style.transformOrigin = (align === 'right' ? 'right' : 'left') + ' top';
   const pop = { kind, el, anchor, refresh() { const old = el.querySelector('[data-gauge]'); el.innerHTML = build(); const nw = el.querySelector('[data-gauge]'); if (nw && old && old._orb) nw.replaceWith(old); else if (nw) Orb.gauge(nw); } }; S.pop = pop; setTimeout(tabSync, 0); pop.refresh(); anchor.setAttribute && anchor.setAttribute('aria-expanded', 'true');
-  if (window.gsap && !REDUCE) { gsap.fromTo(el, { opacity: 0, y: -8, scale: .97 }, { opacity: 1, y: 0, scale: 1, duration: .42, ease: 'expo.out', clearProps: 'transform' }); gsap.from(el.querySelectorAll('.mrow,.grow2,.stack,.pfoot'), { opacity: 0, y: 6, duration: .5, stagger: .04, delay: .06, ease: 'expo.out', clearProps: 'opacity,transform' }); }
 }
 document.addEventListener('pointerdown', (e) => { if (S.pop && !S.pop.el.contains(e.target) && !(S.pop.anchor && S.pop.anchor.contains && S.pop.anchor.contains(e.target))) closePop(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (S.pop) closePop(); else if ($('.modal-bg')) closeModal(); else if (S.edit) cancelEdit(); else if (S.pv.open && innerWidth <= 900) pvClose(); } });
@@ -1018,6 +1017,21 @@ addEventListener('resize', () => { setSeg('#pvMode'); setSeg('#pvDev'); });
 
 /* ---------- 設定 ---------- */
 function closeModal() { const m = $('.modal-bg:not(.out)'); if (!m) return; m.classList.add('out'); tabSync(); setTimeout(() => { m.remove(); }, 380); }
+/* update the DOM in place so CSS transitions (toggle knobs, segmented controls) actually play */
+function morph(a, b) {
+  if (a.nodeType !== 1) { if (a.nodeValue !== b.nodeValue) a.nodeValue = b.nodeValue; return; }
+  for (const at of [...a.attributes]) if (!b.hasAttribute(at.name) && at.name !== 'style') a.removeAttribute(at.name);
+  for (const at of b.attributes) if (a.getAttribute(at.name) !== at.value && !(at.name === 'value' && a === document.activeElement)) a.setAttribute(at.name, at.value);
+  if (a.tagName === 'INPUT' && a !== document.activeElement && a.type !== 'password') { if (a.value !== b.getAttribute('value') && b.hasAttribute('value')) a.value = b.getAttribute('value'); }
+  const ac = [...a.childNodes], bc = [...b.childNodes];
+  bc.forEach((n, i) => {
+    const o = ac[i];
+    if (!o) a.appendChild(n);
+    else if (o.nodeType === n.nodeType && (o.nodeType !== 1 || o.tagName === n.tagName)) morph(o, n);
+    else a.replaceChild(n, o);
+  });
+  for (let i = ac.length - 1; i >= bc.length; i--) ac[i].remove();
+}
 async function openSettings(tab) {
   closePop(); { const o = $('.modal-bg'); if (o) o.remove(); }
   const tabs = isOwner() ? [['budget', 'gauge', 'Budget'], ['models', 'sparkle', 'Models'], ['memory', 'memory', 'Memory'], ['users', 'users', 'Users'], ['account', 'user', 'Account']] : [['account', 'user', 'Account'], ['memory', 'memory', 'Memory']];
@@ -1035,7 +1049,7 @@ async function openSettings(tab) {
     if (sw) { cur = t; nav.innerHTML = navHTML(t); }
     let box = main.firstElementChild;
     if (!box || sw) { main.innerHTML = '<div class="m-in">' + html + '</div>'; main.scrollTop = 0; }
-    else { box.innerHTML = html; main.scrollTop = y; if (fk) { const n = main.querySelector(fk); if (n) n.focus({ preventScroll: true }); } }
+    else { const t2 = document.createElement('div'); t2.innerHTML = html; morph(box, t2); main.scrollTop = y; }
     bindTab(main, () => draw(t, true));
   };
   nav.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-x')) closeModal(); else if (b.dataset.t && b.dataset.t !== cur) draw(b.dataset.t); });
@@ -1168,7 +1182,7 @@ const COARSE = matchMedia('(hover:none) and (pointer:coarse)').matches; // タ�
   const fit = () => {
     if (innerWidth !== lastW) { lastW = innerWidth; maxH = 0; }
     const h = vv ? vv.height : innerHeight; maxH = Math.max(maxH, h, innerHeight);
-    root.style.setProperty('--app-h', h + 'px'); root.style.setProperty('--app-top', (vv ? vv.offsetTop : 0) + 'px');
+    root.style.setProperty('--app-h', h + 'px'); root.style.setProperty('--app-top', '0px');
     root.classList.toggle('kb', h < maxH - 120); // キーボード表示中
     if (document.activeElement === input) scrollEnd(true);
   };
