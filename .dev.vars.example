@@ -1,0 +1,6 @@
+# ローカル開発用の秘密情報。コピーして .dev.vars にして使います(.dev.vars は git に入りません)。
+# 専用のワークスペースを Claude Console で作り、そこでキーを発行して、ワークスペースの支出上限も $25 にしておくと二重の安全になります。
+ANTHROPIC_API_KEY=sk-ant-ここにキー
+
+# 実APIを使わずに動作確認するとき(npm run dev:mock が自動で上書きします)
+# ANTHROPIC_BASE_URL=http://127.0.0.1:8788

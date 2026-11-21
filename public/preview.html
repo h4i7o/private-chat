@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>preview</title>
+<style>html,body{margin:0;height:100%;background:#fff;overflow:hidden}iframe{position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff;opacity:0;transition:opacity .35s}iframe.on{opacity:1}</style>
+</head><body>
+<script>
+/* 親(app.js)から {html, scripts} を受け取り、入れ子の iframe(srcdoc)に描画する。
+   この文書は sandbox="allow-scripts"(opaque origin)で読み込まれ、CSP で通信も禁止されている。 */
+(function () {
+  var HOOK = '<script>(function(){var s=function(m){try{parent.postMessage({pcErr:String(m).slice(0,300)},"*")}catch(e){}};addEventListener("error",function(e){if(e.message&&e.message!=="Script error.")s(e.message+(e.lineno?" (line "+e.lineno+")":""))});addEventListener("unhandledrejection",function(e){var r=e.reason;s("Promise: "+(r&&r.message||r))});var ce=console.error;console.error=function(){try{s([].slice.call(arguments).join(" "))}catch(e){}return ce.apply(console,arguments)}})()<\/script>';
+  var wrap = function (h, hook) {
+    var k = hook ? HOOK : '';
+    if (/<head[^>]*>/i.test(h)) return h.replace(/<head[^>]*>/i, function (m) { return m + k; });
+    if (/<html[^>]*>/i.test(h)) return h.replace(/<html[^>]*>/i, function (m) { return m + k; });
+    return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' + k + '<style>html,body{margin:0;min-height:100%;font-family:-apple-system,system-ui,sans-serif}</style></head><body>' + h + '</body></html>';
+  };
+  var busy = false, lastAt = 0;
+  addEventListener('message', function (e) {
+    if (e.data && typeof e.data.pcErr === 'string') { var cur = document.querySelectorAll('iframe'); for (var i = 0; i < cur.length; i++) if (cur[i].contentWindow === e.source) { parent.postMessage({ pcErr: e.data.pcErr }, '*'); } return; }
+    if (e.source !== parent) return;
+    var d = e.data || {};
+    if (typeof d.html !== 'string') return;
+    var html = d.html;
+    if (!d.scripts) html = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[\s\S]*$/i, '');
+    if (!d.force && busy) return;
+    busy = true;
+    var f = document.createElement('iframe');
+    f.setAttribute('sandbox', d.scripts ? 'allow-scripts' : '');
+    f.srcdoc = wrap(html, d.scripts);
+    f.addEventListener('load', function () {
+      requestAnimationFrame(function () {
+        f.classList.add('on');
+        document.querySelectorAll('iframe').forEach(function (o) { if (o !== f) { o.classList.remove('on'); setTimeout(function () { o.remove(); }, 380); } });
+        busy = false;
+      });
+    }, { once: true });
+    setTimeout(function () { busy = false; }, 1500);
+    document.body.appendChild(f);
+  });
+  parent.postMessage({ ready: true }, '*');
+})();
+</script>
+</body></html>

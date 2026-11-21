@@ -1,0 +1,30 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "private-chat",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "private-chat",
+      // ローカル開発ではこの値のままで動きます。本番デプロイ前に `npx wrangler d1 create private-chat` で得たIDに置き換えます。
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "private-chat-files"
+    }
+  ],
+  "vars": {
+    "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+    "CAP_USD": "25"
+  }
+}
