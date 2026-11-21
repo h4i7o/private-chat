@@ -66,7 +66,7 @@ app.use('/api/*', async (c, next) => {
   if (m !== 'GET' && m !== 'HEAD') {
     const origin = c.req.header('origin');
     const host = new URL(c.req.url).host;
-    if ((origin && new URL(origin).host !== host) || !c.req.header('x-pc')) return err(c, 403, 'forbidden', '不正なリクエストです');
+    if ((origin && new URL(origin).host !== host) || !c.req.header('x-pc')) return err(c, 403, 'forbidden', 'Invalid request');
   }
   await next();
   c.header('cache-control', 'no-store');
@@ -85,12 +85,12 @@ async function authenticate(c: Context<AppEnv>): Promise<User | null> {
 
 const needAuth = async (c: Context<AppEnv>, next: () => Promise<void>) => {
   const u = await authenticate(c);
-  if (!u) return err(c, 401, 'unauthorized', 'ログインが必要です');
+  if (!u) return err(c, 401, 'unauthorized', 'Sign in required');
   c.set('user', u);
   await next();
 };
 const needOwner = async (c: Context<AppEnv>, next: () => Promise<void>) => {
-  if (c.get('user').role !== 'owner') return err(c, 403, 'owner_only', '最高権限者のみ操作できます');
+  if (c.get('user').role !== 'owner') return err(c, 403, 'owner_only', 'Owner only');
   await next();
 };
 
@@ -115,7 +115,7 @@ app.get('/api/session', async (c) => {
 
 app.post('/api/setup', async (c) => {
   const b = await c.req.json().catch(() => null);
-  if (!b || !validName(b.name) || !validPassword(b.password)) return err(c, 400, 'invalid', 'ユーザー名は3〜32文字の英数字、パスワードは8文字以上です');
+  if (!b || !validName(b.name) || !validPassword(b.password)) return err(c, 400, 'invalid', 'Username: 3–32 letters/digits; password: 8+ characters');
   const id = randomHex(8);
   const salt = randomHex(16);
   const hash = await hashPassword(b.password, salt);
@@ -124,20 +124,20 @@ app.post('/api/setup', async (c) => {
     `INSERT INTO users (id, name, role, salt, hash, iterations, created_at)
      SELECT ?1, ?2, 'owner', ?3, ?4, ?5, ?6 WHERE NOT EXISTS (SELECT 1 FROM users)`,
   ).bind(id, b.name, salt, hash, ITERATIONS, Date.now()).run();
-  if (r.meta.changes !== 1) return err(c, 409, 'already_setup', '設定済みです');
+  if (r.meta.changes !== 1) return err(c, 409, 'already_setup', 'Already set up');
   await startSession(c, id);
   return c.json({ user: { name: b.name, role: 'owner' } });
 });
 
 app.post('/api/login', async (c) => {
   const b = await c.req.json().catch(() => null);
-  if (!b || typeof b.name !== 'string' || typeof b.password !== 'string') return err(c, 400, 'invalid', '入力してください');
+  if (!b || typeof b.name !== 'string' || typeof b.password !== 'string') return err(c, 400, 'invalid', 'Enter a value');
   const ip = c.req.header('cf-connecting-ip') || 'local';
   const key = `${b.name.toLowerCase()}|${ip}`;
   const now = Date.now();
   const WINDOW = 15 * 60 * 1000;
   const att = await c.env.DB.prepare('SELECT failures, window_start FROM login_attempts WHERE key = ?').bind(key).first<{ failures: number; window_start: number }>();
-  if (att && now - att.window_start < WINDOW && att.failures >= 5) return err(c, 429, 'rate_limited', '試行が多すぎます。15分後に再試行してください');
+  if (att && now - att.window_start < WINDOW && att.failures >= 5) return err(c, 429, 'rate_limited', 'Too many attempts. Try again in 15 minutes');
 
   const u = await c.env.DB.prepare('SELECT id, name, role, salt, hash, iterations FROM users WHERE name = ?').bind(b.name).first<User & { salt: string; hash: string; iterations: number }>();
   // ユーザーが存在しなくても同じ計算量を使い、時間差で存在を推測されないようにする
@@ -148,7 +148,7 @@ app.post('/api/login', async (c) => {
       `INSERT INTO login_attempts (key, failures, window_start) VALUES (?1, 1, ?2)
        ON CONFLICT(key) DO UPDATE SET failures = ?3, window_start = ?4`,
     ).bind(key, now, fresh ? 1 : (att!.failures + 1), fresh ? now : att!.window_start).run();
-    return err(c, 401, 'bad_credentials', 'ユーザー名かパスワードが違います');
+    return err(c, 401, 'bad_credentials', 'Wrong username or password');
   }
   await c.env.DB.prepare('DELETE FROM login_attempts WHERE key = ?').bind(key).run();
   await startSession(c, u.id);
@@ -179,7 +179,7 @@ app.post('/api/passkey/login/options', async (c) => {
 });
 
 app.post('/api/passkey/login/verify', async (c) => {
-  const fail = () => err(c, 401, 'passkey_failed', 'パスキーを確認できませんでした');
+  const fail = () => err(c, 401, 'passkey_failed', 'Could not verify passkey');
   const b = await c.req.json().catch(() => null);
   if (!b || ['id', 'clientDataJSON', 'authenticatorData', 'signature'].some((k) => typeof b[k] !== 'string')) return fail();
   try {
@@ -221,7 +221,7 @@ api.post('/passkeys/options', async (c) => {
   const u = c.get('user');
   const { rpId } = rpOf(c);
   const have = await c.env.DB.prepare('SELECT id FROM passkeys WHERE user_id = ?').bind(u.id).all<{ id: string }>();
-  if (have.results.length >= 10) return err(c, 400, 'too_many', 'パスキーは10個までです');
+  if (have.results.length >= 10) return err(c, 400, 'too_many', 'Up to 10 passkeys');
   return c.json({
     challenge: await newChallenge(c.env, 'register', u.id),
     rp: { name: 'Private Chat', id: rpId },
@@ -236,7 +236,7 @@ api.post('/passkeys/options', async (c) => {
 
 api.post('/passkeys', async (c) => {
   const u = c.get('user');
-  const fail = (m = 'パスキーを登録できませんでした') => err(c, 400, 'passkey_failed', m);
+  const fail = (m = 'Could not register passkey') => err(c, 400, 'passkey_failed', m);
   const b = await c.req.json().catch(() => null);
   if (!b || ['id', 'clientDataJSON', 'authenticatorData', 'publicKey'].some((k) => typeof b[k] !== 'string') || ![-7, -257].includes(b.alg)) return fail();
   try {
@@ -249,13 +249,13 @@ api.post('/passkeys', async (c) => {
     if (!parsed || !parsed.credId || !(await rpIdMatches(parsed, rpId)) || !(parsed.flags & FLAG_UP) || !(parsed.flags & FLAG_UV)) return fail();
     if (b64u.enc(parsed.credId) !== b.id) return fail();
     await importKey(spki, b.alg); // 鍵として読めるか確認
-    const name = (typeof b.name === 'string' && b.name.trim() ? b.name.trim() : 'パスキー').slice(0, 40);
+    const name = (typeof b.name === 'string' && b.name.trim() ? b.name.trim() : 'Passkey').slice(0, 40);
     const transports = Array.isArray(b.transports) ? JSON.stringify(b.transports.filter((t: unknown) => typeof t === 'string').slice(0, 6)) : null;
     const r = await c.env.DB.prepare(
       `INSERT INTO passkeys (id, user_id, public_key, alg, counter, transports, name, created_at)
        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE (SELECT COUNT(*) FROM passkeys WHERE user_id = ?2) < 10 AND NOT EXISTS (SELECT 1 FROM passkeys WHERE id = ?1)`,
     ).bind(b.id, u.id, b.publicKey, b.alg, parsed.counter, transports, name, Date.now()).run();
-    if (r.meta.changes !== 1) return fail('このパスキーは登録済みか、上限に達しています');
+    if (r.meta.changes !== 1) return fail('Passkey already registered or limit reached');
     return c.json({ ok: true });
   } catch { return fail(); }
 });
@@ -277,9 +277,9 @@ api.post('/memories', async (c) => {
   const u = c.get('user');
   const b = await c.req.json().catch(() => null);
   const text = cleanMem(b?.text);
-  if (!text) return err(c, 400, 'invalid', '内容を入力してください');
+  if (!text) return err(c, 400, 'invalid', 'Enter some text');
   const st = await c.env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(length(text)), 0) AS t FROM memories WHERE user_id = ?').bind(u.id).first<{ n: number; t: number }>();
-  if ((st?.n ?? 0) >= MEM_MAX_ITEMS || (st?.t ?? 0) + text.length > MEM_MAX_TOTAL) return err(c, 400, 'too_many', 'メモリがいっぱいです。古いものを消してください');
+  if ((st?.n ?? 0) >= MEM_MAX_ITEMS || (st?.t ?? 0) + text.length > MEM_MAX_TOTAL) return err(c, 400, 'too_many', 'Memory is full. Delete older items');
   const id = randomHex(8);
   await c.env.DB.prepare('INSERT INTO memories (id, user_id, text, created_at) VALUES (?,?,?,?)').bind(id, u.id, text, Date.now()).run();
   return c.json({ memory: { id, text } });
@@ -287,9 +287,9 @@ api.post('/memories', async (c) => {
 api.patch('/memories/:id', async (c) => {
   const b = await c.req.json().catch(() => null);
   const text = cleanMem(b?.text);
-  if (!text) return err(c, 400, 'invalid', '内容を入力してください');
+  if (!text) return err(c, 400, 'invalid', 'Enter some text');
   const r = await c.env.DB.prepare('UPDATE memories SET text = ? WHERE id = ? AND user_id = ?').bind(text, c.req.param('id'), c.get('user').id).run();
-  if (r.meta.changes !== 1) return err(c, 404, 'not_found', '見つかりません');
+  if (r.meta.changes !== 1) return err(c, 404, 'not_found', 'Not found');
   return c.json({ ok: true });
 });
 api.delete('/memories/:id', async (c) => {
@@ -301,9 +301,9 @@ api.delete('/memories/:id', async (c) => {
 api.get('/attachments/:id', async (c) => {
   const u = c.get('user');
   const a = await c.env.DB.prepare('SELECT name, mime, r2_key FROM attachments WHERE id = ?').bind(c.req.param('id')).first<{ name: string; mime: string; r2_key: string }>();
-  if (!a || !a.r2_key.startsWith(`u/${u.id}/`)) return err(c, 404, 'not_found', '見つかりません');
+  if (!a || !a.r2_key.startsWith(`u/${u.id}/`)) return err(c, 404, 'not_found', 'Not found');
   const o = await c.env.FILES.get(a.r2_key);
-  if (!o) return err(c, 404, 'not_found', '見つかりません');
+  if (!o) return err(c, 404, 'not_found', 'Not found');
   const inline = a.mime === 'application/pdf' || a.mime.startsWith('image/') || a.mime === 'text/plain';
   return new Response(o.body, { headers: {
     'content-type': a.mime === 'text/plain' ? 'text/plain; charset=utf-8' : a.mime,
@@ -315,10 +315,10 @@ api.get('/attachments/:id', async (c) => {
 
 api.post('/password', async (c) => {
   const b = await c.req.json().catch(() => null);
-  if (!b || !validPassword(b.next) || typeof b.current !== 'string') return err(c, 400, 'invalid', 'パスワードは8文字以上です');
+  if (!b || !validPassword(b.next) || typeof b.current !== 'string') return err(c, 400, 'invalid', 'Password must be at least 8 characters');
   const u = c.get('user');
   const row = await c.env.DB.prepare('SELECT salt, hash, iterations FROM users WHERE id = ?').bind(u.id).first<{ salt: string; hash: string; iterations: number }>();
-  if (!row || !safeEqual(await hashPassword(b.current, row.salt, row.iterations), row.hash)) return err(c, 400, 'bad_credentials', '現在のパスワードが違います');
+  if (!row || !safeEqual(await hashPassword(b.current, row.salt, row.iterations), row.hash)) return err(c, 400, 'bad_credentials', 'Current password is wrong');
   const salt = randomHex(16);
   const token = getCookie(c, 'sid')!;
   await c.env.DB.batch([
@@ -334,19 +334,19 @@ api.get('/users', needOwner, async (c) => {
 });
 api.post('/users', needOwner, async (c) => {
   const b = await c.req.json().catch(() => null);
-  if (!b || !validName(b.name) || !validPassword(b.password)) return err(c, 400, 'invalid', 'ユーザー名は3〜32文字の英数字、パスワードは8文字以上です');
+  if (!b || !validName(b.name) || !validPassword(b.password)) return err(c, 400, 'invalid', 'Username: 3–32 letters/digits; password: 8+ characters');
   const salt = randomHex(16);
   const r = await c.env.DB.prepare(
     `INSERT INTO users (id, name, role, salt, hash, iterations, created_at)
      SELECT ?1, ?2, 'user', ?3, ?4, ?5, ?6
      WHERE (SELECT COUNT(*) FROM users) < 2 AND NOT EXISTS (SELECT 1 FROM users WHERE name = ?2)`,
   ).bind(randomHex(8), b.name, salt, await hashPassword(b.password, salt), ITERATIONS, Date.now()).run().catch(() => null);
-  if (!r || r.meta.changes !== 1) return err(c, 409, 'cannot_add', 'ユーザーは2人までで、名前は重複できません');
+  if (!r || r.meta.changes !== 1) return err(c, 409, 'cannot_add', 'Up to 2 users; names must be unique');
   return c.json({ ok: true });
 });
 api.delete('/users/:name', needOwner, async (c) => {
   const u = await c.env.DB.prepare("SELECT id FROM users WHERE name = ? AND role = 'user'").bind(c.req.param('name')).first<{ id: string }>();
-  if (!u) return err(c, 404, 'not_found', '見つかりません');
+  if (!u) return err(c, 404, 'not_found', 'Not found');
   const files = await c.env.DB.prepare('SELECT r2_key FROM attachments WHERE user_id = ?').bind(u.id).all<{ r2_key: string }>();
   if (files.results.length) await c.env.FILES.delete(files.results.map((f) => f.r2_key));
   await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(u.id).run(); // sessions, chats, messages, attachments は CASCADE
@@ -354,9 +354,9 @@ api.delete('/users/:name', needOwner, async (c) => {
 });
 api.post('/users/:name/password', needOwner, async (c) => {
   const b = await c.req.json().catch(() => null);
-  if (!b || !validPassword(b.password)) return err(c, 400, 'invalid', 'パスワードは8文字以上です');
+  if (!b || !validPassword(b.password)) return err(c, 400, 'invalid', 'Password must be at least 8 characters');
   const u = await c.env.DB.prepare("SELECT id FROM users WHERE name = ? AND role = 'user'").bind(c.req.param('name')).first<{ id: string }>();
-  if (!u) return err(c, 404, 'not_found', '見つかりません');
+  if (!u) return err(c, 404, 'not_found', 'Not found');
   const salt = randomHex(16);
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE users SET salt = ?, hash = ?, iterations = ? WHERE id = ?').bind(salt, await hashPassword(b.password, salt), ITERATIONS, u.id),
@@ -376,9 +376,9 @@ api.post('/ledger/reset', needOwner, async (c) => {
 api.post('/ledger/set', needOwner, async (c) => {
   const b = await c.req.json().catch(() => null);
   const usd = Number(b?.usd);
-  if (!Number.isFinite(usd) || usd < 0) return err(c, 400, 'invalid', '金額を入力してください');
+  if (!Number.isFinite(usd) || usd < 0) return err(c, 400, 'invalid', 'Enter an amount');
   const nano = Math.round(usd * 1e9);
-  if (nano > cap(c.env)) return err(c, 400, 'invalid', '上限を超える金額は入れられません');
+  if (nano > cap(c.env)) return err(c, 400, 'invalid', 'Amount exceeds the cap');
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE ledger_models SET spent = CAST(ROUND(1.0 * spent * ?1 / (SELECT SUM(spent) FROM ledger_models)) AS INTEGER) WHERE (SELECT SUM(spent) FROM ledger_models) > 0').bind(nano),
     c.env.DB.prepare('UPDATE ledger_models SET spent = 0 WHERE (SELECT SUM(spent) FROM ledger_models) = 0 OR ?1 = 0').bind(nano),
@@ -390,7 +390,7 @@ api.post('/ledger/set', needOwner, async (c) => {
 // 反映は「この額に合わせる」(/ledger/set)で、最高権限者が確認してから。
 api.post('/ledger/sync', needOwner, async (c) => {
   const key = c.env.ANTHROPIC_ADMIN_KEY;
-  if (!key) return err(c, 400, 'no_admin_key', '管理用キー(ANTHROPIC_ADMIN_KEY)が設定されていません');
+  if (!key) return err(c, 400, 'no_admin_key', 'Admin key (ANTHROPIC_ADMIN_KEY) is not set');
   const b = await c.req.json().catch(() => ({}));
   const now = new Date();
   const since = typeof b?.since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.since) ? b.since : `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-01`;
@@ -405,19 +405,19 @@ api.post('/ledger/sync', needOwner, async (c) => {
       url.searchParams.append('group_by[]', 'workspace_id');
       if (page) url.searchParams.set('page', page);
       const r = await fetch(url, { headers: { 'x-api-key': key, 'anthropic-version': '2026-10-21' } });
-      if (!r.ok) return err(c, 502, 'sync_failed', `Console に問い合わせられません (${r.status})。管理用キーの種類と権限を確認してください`);
+      if (!r.ok) return err(c, 502, 'sync_failed', `Could not query Console (${r.status}). Check the admin key type and permissions`);
       const j = (await r.json()) as { data?: { results?: { amount?: string; workspace_id?: string | null }[] }[]; has_more?: boolean; next_page?: string };
       for (const bk of j.data ?? []) for (const x of bk.results ?? []) if (!ws || x.workspace_id === ws) cents += Number(x.amount ?? 0) || 0;
       if (!j.has_more || !j.next_page) break;
       page = j.next_page;
     }
-  } catch (e) { return err(c, 502, 'sync_failed', `Console に問い合わせられません: ${(e as Error).message}`); }
+  } catch (e) { return err(c, 502, 'sync_failed', `Could not query Console: ${(e as Error).message}`); }
   const led = await readLedger(c.env.DB, Date.now());
   return c.json({ since, workspace: ws || null, consoleNano: Math.round(cents * 1e7), siteNano: led.spent });
 });
 api.post('/ledger/limiter', needOwner, async (c) => {
   const b = await c.req.json().catch(() => null);
-  if (!b || typeof b.override !== 'boolean') return err(c, 400, 'invalid', 'override を指定してください');
+  if (!b || typeof b.override !== 'boolean') return err(c, 400, 'invalid', 'Specify override');
   await c.env.DB.prepare('UPDATE ledger SET override = ? WHERE id = 1').bind(b.override ? 1 : 0).run();
   return c.json({ ledger: await readLedger(c.env.DB, Date.now()) });
 });
@@ -434,7 +434,7 @@ api.put('/settings', needOwner, async (c) => {
   for (const k of MODEL_KEYS) {
     const v = b?.maxTokens?.[k];
     if (v !== undefined) {
-      if (!PRESETS.includes(v)) return err(c, 400, 'invalid', `最大出力は ${PRESETS.join(' / ')} から選んでください`);
+      if (!PRESETS.includes(v)) return err(c, 400, 'invalid', `Choose max output from ${PRESETS.join(' / ')}`);
       next[k] = v;
     }
   }
@@ -487,7 +487,7 @@ api.get('/chats', async (c) => {
 
 api.get('/chats/:id', async (c) => {
   const chat = await c.env.DB.prepare('SELECT id, title, updated_at AS updated, pinned, last_model AS lastModel, last_ts AS lastTs FROM chats WHERE id = ? AND user_id = ?').bind(c.req.param('id'), c.get('user').id).first();
-  if (!chat) return err(c, 404, 'not_found', '見つかりません');
+  if (!chat) return err(c, 404, 'not_found', 'Not found');
   const [m, a, v] = await c.env.DB.batch([
     c.env.DB.prepare('SELECT id, role, text, model, meta, ts, compacted FROM messages WHERE chat_id = ? ORDER BY seq').bind(c.req.param('id')),
     c.env.DB.prepare('SELECT id, message_id, name, kind, tokens, size FROM attachments WHERE chat_id = ? AND message_id IS NOT NULL').bind(c.req.param('id')),
@@ -513,15 +513,15 @@ api.get('/chats/:id', async (c) => {
 api.patch('/chats/:id', async (c) => {
   const b = await c.req.json().catch(() => null);
   const own = await c.env.DB.prepare('SELECT id FROM chats WHERE id = ? AND user_id = ?').bind(c.req.param('id'), c.get('user').id).first();
-  if (!own) return err(c, 404, 'not_found', '見つかりません');
+  if (!own) return err(c, 404, 'not_found', 'Not found');
   const sets: string[] = []; const vals: unknown[] = [];
   if (b?.title !== undefined) {
     const t = typeof b.title === 'string' ? b.title.replace(/\s+/g, ' ').trim().slice(0, 60) : '';
-    if (!t) return err(c, 400, 'invalid', 'タイトルを入力してください');
+    if (!t) return err(c, 400, 'invalid', 'Enter a title');
     sets.push('title = ?'); vals.push(t);
   }
   if (b?.pinned !== undefined) { sets.push('pinned = ?'); vals.push(b.pinned ? 1 : 0); }
-  if (!sets.length) return err(c, 400, 'invalid', '変更がありません');
+  if (!sets.length) return err(c, 400, 'invalid', 'No changes');
   await c.env.DB.prepare(`UPDATE chats SET ${sets.join(', ')} WHERE id = ?`).bind(...vals, c.req.param('id')).run();
   const row = await c.env.DB.prepare('SELECT id, title, pinned FROM chats WHERE id = ?').bind(c.req.param('id')).first();
   return c.json({ chat: row });
@@ -531,15 +531,15 @@ api.patch('/chats/:id', async (c) => {
 api.post('/messages/:id/version', async (c) => {
   const b = await c.req.json().catch(() => null);
   const n = Number(b?.n);
-  if (!Number.isInteger(n) || n < 1) return err(c, 400, 'invalid', '版を指定してください');
+  if (!Number.isInteger(n) || n < 1) return err(c, 400, 'invalid', 'Specify a version');
   const m = await c.env.DB.prepare(
     `SELECT m.id, m.chat_id FROM messages m JOIN chats c ON c.id = m.chat_id
      WHERE m.id = ?1 AND c.user_id = ?2 AND m.role = 'ai'
        AND m.seq = (SELECT MAX(seq) FROM messages WHERE chat_id = m.chat_id)`,
   ).bind(c.req.param('id'), c.get('user').id).first<{ id: string; chat_id: string }>();
-  if (!m) return err(c, 404, 'not_found', '切り替えられるのは最後の応答だけです');
+  if (!m) return err(c, 404, 'not_found', 'Only the last reply can switch versions');
   const v = await c.env.DB.prepare('SELECT text, model, meta, ts FROM ai_versions WHERE msg_id = ? AND n = ?').bind(m.id, n).first<{ text: string; model: string | null; meta: string | null; ts: number }>();
-  if (!v) return err(c, 404, 'not_found', 'その版はありません');
+  if (!v) return err(c, 404, 'not_found', 'No such version');
   let meta: any = {};
   try { meta = v.meta ? JSON.parse(v.meta) : {}; } catch { /* 空で */ }
   meta.ver = n;
@@ -565,7 +565,7 @@ async function exportRows(env: Env, chatId: string) {
 
 api.get('/chats/:id/export', async (c) => {
   const chat = await c.env.DB.prepare('SELECT id, title, updated_at FROM chats WHERE id = ? AND user_id = ?').bind(c.req.param('id'), c.get('user').id).first<{ id: string; title: string; updated_at: number }>();
-  if (!chat) return err(c, 404, 'not_found', '見つかりません');
+  if (!chat) return err(c, 404, 'not_found', 'Not found');
   const rows = await exportRows(c.env, chat.id);
   if (c.req.query('format') === 'json') return download(c, JSON.stringify({ title: chat.title, exportedAt: new Date().toISOString(), messages: rows }, null, 2), `${safeName(chat.title)}.json`, 'application/json');
   const md = [`# ${chat.title}`, '', `> ${new Date().toISOString()} に書き出し`, ''];
@@ -585,7 +585,7 @@ api.get('/export', async (c) => {
 api.delete('/chats/:id', async (c) => {
   const id = c.req.param('id');
   const own = await c.env.DB.prepare('SELECT id FROM chats WHERE id = ? AND user_id = ?').bind(id, c.get('user').id).first();
-  if (!own) return err(c, 404, 'not_found', '見つかりません');
+  if (!own) return err(c, 404, 'not_found', 'Not found');
   const files = await c.env.DB.prepare('SELECT r2_key FROM attachments WHERE chat_id = ?').bind(id).all<{ r2_key: string }>();
   if (files.results.length) await c.env.FILES.delete(files.results.map((f) => f.r2_key));
   await c.env.DB.batch([
@@ -601,7 +601,7 @@ interface AttRow { id: string; name: string; kind: 'image' | 'pdf' | 'text'; mim
 
 async function attachmentBlock(env: Env, a: AttRow) {
   const obj = await env.FILES.get(a.r2_key);
-  if (!obj) throw new Error(`添付 ${a.name} が見つかりません`);
+  if (!obj) throw new Error(`Attachment ${a.name} not found`);
   const buf = await obj.arrayBuffer();
   if (a.kind === 'image') return { type: 'image', source: { type: 'base64', media_type: a.mime, data: toBase64(buf) } };
   if (a.kind === 'pdf') return { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: toBase64(buf) } };
@@ -627,11 +627,11 @@ api.post('/upload', async (c) => {
   const name = decodeURIComponent(c.req.header('x-filename') || 'file').slice(0, 120);
   const mime = (c.req.header('content-type') || 'application/octet-stream').split(';')[0].trim();
   const kind = kindOf(name, mime);
-  if (!kind) return err(c, 415, 'unsupported', `${name} は対応していません`);
+  if (!kind) return err(c, 415, 'unsupported', `${name} is not supported`);
   const declared = Number(c.req.header('content-length') || '0');
-  if (declared > LIMITS[kind]) return err(c, 413, 'too_large', `${name} が大きすぎます`);
+  if (declared > LIMITS[kind]) return err(c, 413, 'too_large', `${name} is too large`);
   const body = await c.req.arrayBuffer();
-  if (body.byteLength === 0 || body.byteLength > LIMITS[kind]) return err(c, 413, 'too_large', `${name} が大きすぎます`);
+  if (body.byteLength === 0 || body.byteLength > LIMITS[kind]) return err(c, 413, 'too_large', `${name} is too large`);
   const modelKey = c.req.query('model');
   const m = MODELS[isModelKey(modelKey) ? modelKey : 'sonnet'];
 
@@ -646,7 +646,7 @@ api.post('/upload', async (c) => {
     tokens = await countTokens(c.env, { model: m.id, messages: [{ role: 'user', content: [block] }] });
   } catch (e) {
     await c.env.FILES.delete(row.r2_key);
-    if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `トークンを数えられません: ${upstreamMessage(e)}`);
+    if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `Could not count tokens: ${upstreamMessage(e)}`);
     throw e;
   }
   await c.env.DB.prepare('INSERT INTO attachments (id, user_id, name, kind, mime, size, tokens, r2_key, created_at) VALUES (?,?,?,?,?,?,?,?,?)')
@@ -761,7 +761,7 @@ function gateOf(q: Quote, outPrice: number, remaining: number, override: boolean
 api.post('/quote', async (c) => {
   const u = c.get('user');
   const b = await c.req.json().catch(() => null);
-  if (!b) return err(c, 400, 'invalid', '不正なリクエストです');
+  if (!b) return err(c, 400, 'invalid', 'Invalid request');
   const cfg = await readConfig(c.env.DB);
   const compact = b.compact === true;
   const rawText = typeof b.text === 'string' ? b.text.trim() : '';
@@ -772,21 +772,21 @@ api.post('/quote', async (c) => {
   const system = await systemFor(c.env, u.id, b.memory !== false);
   const editId: string | null = !compact && typeof b.editMsgId === 'string' && b.editMsgId ? b.editMsgId : null;
   const atts = compact ? [] : await loadPending(c, b.attachmentIds ?? [], editId);
-  if (!atts) return err(c, 400, 'invalid_attachment', '添付が見つかりません');
-  if (compact && !b.chatId) return err(c, 400, 'invalid', '圧縮できる会話がありません');
+  if (!atts) return err(c, 400, 'invalid_attachment', 'Attachment not found');
+  if (compact && !b.chatId) return err(c, 400, 'invalid', 'Nothing to compress');
 
   let hist = 0;
   let editEmpty = false;
   if (editId) {
-    if (!b.chatId) return err(c, 400, 'invalid', '不正なリクエストです');
+    if (!b.chatId) return err(c, 400, 'invalid', 'Invalid request');
     const seq = await editTarget(c.env, u.id, b.chatId, editId);
-    if (seq == null) return err(c, 404, 'not_found', '編集するメッセージが見つかりません');
+    if (seq == null) return err(c, 404, 'not_found', 'Message to edit not found');
     try { hist = await editHistTokens(c.env, b.chatId, editId, seq, system); }
-    catch (e) { if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `トークンを数えられません: ${upstreamMessage(e)}`); throw e; }
+    catch (e) { if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `Could not count tokens: ${upstreamMessage(e)}`); throw e; }
     editEmpty = hist === 0;
   } else if (b.chatId) {
     const ch = await c.env.DB.prepare('SELECT hist_tokens, last_model, last_ts FROM chats WHERE id = ? AND user_id = ?').bind(b.chatId, u.id).first<{ hist_tokens: number; last_model: string | null; last_ts: number | null }>();
-    if (!ch) return err(c, 404, 'not_found', 'チャットが見つかりません');
+    if (!ch) return err(c, 404, 'not_found', 'Chat not found');
     hist = ch.hist_tokens;
   }
   const isNewChat = !b.chatId;
@@ -822,7 +822,7 @@ api.post('/quote', async (c) => {
       models[k] = { ...q, gate: gateOf(q, m.out, remaining, ledger.override) };
     }));
   } catch (e) {
-    if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `トークンを数えられません: ${upstreamMessage(e)}`);
+    if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `Could not count tokens: ${upstreamMessage(e)}`);
     throw e;
   }
   return c.json({ models, ledger, capNano: cap(c.env) });
@@ -840,7 +840,7 @@ api.post('/send', async (c) => {
   const u = c.get('user');
   const env = c.env;
   const b = await c.req.json().catch(() => null);
-  if (!b || !isModelKey(b.model)) return err(c, 400, 'invalid', 'モデルを選んでください');
+  if (!b || !isModelKey(b.model)) return err(c, 400, 'invalid', 'Choose a model');
   const model: ModelKey = b.model;
   const m = MODELS[model];
   const cfg = await readConfig(env.DB);
@@ -856,17 +856,17 @@ api.post('/send', async (c) => {
   const system = await systemFor(env, u.id, b.memory !== false);
   const thinkOn = cfg.thinking && !compact;
   let chatId: string = b.chatId;
-  if ((compact || regenId || editId) && !chatId) return err(c, 400, 'invalid', '不正なリクエストです');
+  if ((compact || regenId || editId) && !chatId) return err(c, 400, 'invalid', 'Invalid request');
 
   let text = rawText;
   let atts: AttRow[] = [];
   if (!compact && !regenId) {
     const pending = await loadPending(c, b.attachmentIds ?? [], editId);
-    if (!pending) return err(c, 400, 'invalid_attachment', '添付が見つかりません');
+    if (!pending) return err(c, 400, 'invalid_attachment', 'Attachment not found');
     atts = pending;
-    if (!text && atts.length === 0) return err(c, 400, 'empty', 'メッセージを入力してください');
+    if (!text && atts.length === 0) return err(c, 400, 'empty', 'Enter a message');
   }
-  if (text.length > 200_000) return err(c, 413, 'too_large', 'メッセージが長すぎます');
+  if (text.length > 200_000) return err(c, 413, 'too_large', 'Message is too long');
 
   // 履歴
   let isNew = false;
@@ -877,12 +877,12 @@ api.post('/send', async (c) => {
   let regen: { aiId: string; userId: string; nextN: number } | null = null;
   if (chatId) {
     const ch = await env.DB.prepare('SELECT id FROM chats WHERE id = ? AND user_id = ?').bind(chatId, u.id).first();
-    if (!ch) return err(c, 404, 'not_found', 'チャットが見つかりません');
+    if (!ch) return err(c, 404, 'not_found', 'Chat not found');
     if (regenId) {
       const a = await env.DB.prepare("SELECT id, seq, meta FROM messages WHERE id = ?1 AND chat_id = ?2 AND role = 'ai' AND compacted = 0 AND seq = (SELECT MAX(seq) FROM messages WHERE chat_id = ?2)").bind(regenId, chatId).first<{ id: string; seq: number; meta: string | null }>();
-      if (!a || isSummary(a.meta)) return err(c, 404, 'not_found', '再生成できるのは最後の応答だけです');
+      if (!a || isSummary(a.meta)) return err(c, 404, 'not_found', 'Only the last reply can be regenerated');
       const um = await env.DB.prepare("SELECT id, seq, text FROM messages WHERE chat_id = ? AND role = 'user' AND seq < ? AND compacted = 0 ORDER BY seq DESC LIMIT 1").bind(chatId, a.seq).first<{ id: string; seq: number; text: string }>();
-      if (!um) return err(c, 404, 'not_found', '元の発言が見つかりません');
+      if (!um) return err(c, 404, 'not_found', 'Original message not found');
       text = um.text;
       const ar = await env.DB.prepare('SELECT id, name, kind, mime, size, tokens, r2_key, message_id FROM attachments WHERE message_id = ?').bind(um.id).all<AttRow>();
       atts = ar.results;
@@ -892,13 +892,13 @@ api.post('/send', async (c) => {
       regen = { aiId: a.id, userId: um.id, nextN: (mx?.n ?? 1) + 1 };
     } else if (compact) {
       const h = await buildHistory(env, chatId, null);
-      if (h.history.length < 2) return err(c, 400, 'compact_empty', '圧縮する会話がまだありません');
+      if (h.history.length < 2) return err(c, 400, 'compact_empty', 'Nothing to compress yet');
       history = h.history; historyBytes = h.bytes;
       text = COMPACT_PROMPT + (rawText ? `\n\n追加の指示: ${rawText}` : '');
     } else {
       if (editId) {
         editSeq = await editTarget(env, u.id, chatId, editId);
-        if (editSeq == null) return err(c, 404, 'not_found', '編集するメッセージが見つかりません');
+        if (editSeq == null) return err(c, 404, 'not_found', 'Message to edit not found');
       }
       const h = await buildHistory(env, chatId, editSeq);
       history = h.history; historyBytes = h.bytes;
@@ -913,7 +913,7 @@ api.post('/send', async (c) => {
     chatId = randomHex(8);
     isNew = true;
   }
-  if (historyBytes + atts.reduce((s, a) => s + a.size, 0) > MAX_REQUEST_BYTES) return err(c, 413, 'too_large', '添付が多すぎます。新しいチャットで試してください');
+  if (historyBytes + atts.reduce((s, a) => s + a.size, 0) > MAX_REQUEST_BYTES) return err(c, 413, 'too_large', 'Too many attachments. Try a new chat');
 
   let newContent: unknown[];
   try { newContent = await userContent(env, atts, text); } catch (e) { return err(c, 400, 'invalid_attachment', (e as Error).message); }
@@ -922,7 +922,7 @@ api.post('/send', async (c) => {
   // 正確な入力トークン数(送信直前)
   let inputTokens: number;
   try { inputTokens = await countTokens(env, { model: m.id, system, messages }); }
-  catch (e) { if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `トークンを数えられません: ${upstreamMessage(e)}`); throw e; }
+  catch (e) { if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `Could not count tokens: ${upstreamMessage(e)}`); throw e; }
 
   // 最悪ケースを計算して、原子的に予約する
   const maxTokens = compact ? COMPACT_MAX_OUT : (await readMaxTokens(env.DB))[model];
@@ -932,7 +932,7 @@ api.post('/send', async (c) => {
   const minViable = q.inputNano + q.searchWorstNano + MIN_OUT_TOKENS * m.out;
   const res = await reserve(env.DB, reservationId, now, cap(env), q.worstNano, minViable);
   if (!res.ok) {
-    return err(c, 402, res.why === 'cap' ? 'cap' : 'limiter', res.why === 'cap' ? '上限に達しています' : '最悪ケースが残額を超えています(解除は最高権限者のみ)');
+    return err(c, 402, res.why === 'cap' ? 'cap' : 'limiter', res.why === 'cap' ? 'Cap reached' : 'Worst case exceeds balance (owner can unlock)');
   }
   // 制限解除中は、予約できた額に収まるよう max_tokens を絞る。API側が上限を守るので、出力が予約を超えることはない。
   const outAllowed = Math.floor((res.amount - q.inputNano - q.searchWorstNano) / m.out);
@@ -951,7 +951,7 @@ api.post('/send', async (c) => {
 
   const userMsgId = regen ? regen.userId : randomHex(8);
   const aiMsgId = regen ? regen.aiId : randomHex(8);
-  const title = (text || atts[0]?.name || '新しいチャット').replace(/\s+/g, ' ').slice(0, 28);
+  const title = (text || atts[0]?.name || 'New chat').replace(/\s+/g, ' ').slice(0, 28);
   const ac = new AbortController();
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   const writer = writable.getWriter();
@@ -1106,10 +1106,10 @@ api.post('/send', async (c) => {
 });
 
 app.route('/api', api);
-app.notFound((c) => (c.req.path.startsWith('/api/') ? err(c, 404, 'not_found', '見つかりません') : c.env.ASSETS.fetch(c.req.raw)));
+app.notFound((c) => (c.req.path.startsWith('/api/') ? err(c, 404, 'not_found', 'Not found') : c.env.ASSETS.fetch(c.req.raw)));
 app.onError((e, c) => {
   console.error(e);
-  return err(c, 500, 'internal', 'サーバーでエラーが起きました');
+  return err(c, 500, 'internal', 'Server error');
 });
 
 export default app;

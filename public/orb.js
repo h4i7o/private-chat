@@ -10,8 +10,8 @@
   const fib = (n) => { const a = []; const g = Math.PI * (3 - Math.sqrt(5)); for (let i = 0; i < n; i++) { const y = 1 - (i / (n - 1)) * 2, r = Math.sqrt(1 - y * y), t = g * i; a.push([Math.cos(t) * r, y, Math.sin(t) * r]); } return a; };
   const rot = (x, y, z, a, tilt) => { const ca = Math.cos(a), sa = Math.sin(a), x1 = x * ca + z * sa, z1 = -x * sa + z * ca, ct = Math.cos(tilt), st2 = Math.sin(tilt); return [x1, y * ct - z1 * st2, y * st2 + z1 * ct]; };
   const pal = () => dark.matches
-    ? { cool: [215, 238, 255], warm: [255, 214, 138], lit: (d) => [205 + d * 40, 232 + d * 20, 255], dim: [120, 140, 175], star: '235,248,255', dust: '210,230,255', mini: (d) => [255, 255, 255], bokeh: [150, 200, 255] }
-    : { cool: [40, 110, 190], warm: [205, 128, 0], lit: (d) => [30 + (1 - d) * 50, 100 + (1 - d) * 50, 185 + (1 - d) * 40], dim: [110, 120, 150], star: '40,110,190', dust: '60,100,160', mini: (d) => [30, 40, 70], bokeh: [90, 150, 230] };
+    ? { cool: [240, 240, 244], warm: [236, 210, 160], lit: (d) => [222 + d * 33, 222 + d * 33, 228 + d * 27], dim: [128, 128, 136], star: '255,255,255', dust: '232,232,238', mini: (d) => [255, 255, 255], bokeh: [215, 215, 226] }
+    : { cool: [44, 44, 52], warm: [176, 122, 16], lit: (d) => [34 + (1 - d) * 56, 34 + (1 - d) * 56, 42 + (1 - d) * 56], dim: [140, 140, 150], star: '40,40,50', dust: '80,80,92', mini: (d) => [30, 30, 38], bokeh: [120, 120, 138] };
   const star = (ctx, x, y, L, a, c) => { ctx.strokeStyle = `rgba(${c},${a})`; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - L, y); ctx.lineTo(x + L, y); ctx.moveTo(x, y - L); ctx.lineTo(x, y + L); ctx.stroke(); };
   const speed = () => ({ idle: 1, thinking: 3.4, speaking: 1.6, alert: 2 }[st.state] || 1);
 
@@ -63,7 +63,7 @@
       const ang = t * .00016 * (st.state === 'thinking' ? 2.4 : 1) + drag, tilt = .42;
       xm.clearRect(0, 0, W, W); xb.clearRect(0, 0, W, W);
       for (const b of bokeh) { b.a += b.v; const bx = cx + Math.cos(b.a) * b.r * R * 1.1, by = cy + b.y * R, al = .06 + .07 * (1 + Math.sin(t * .0006 + b.ph)) / 2; xb.fillStyle = `rgba(${hot ? 255 : P.bokeh[0]},${hot ? 200 : P.bokeh[1]},${hot ? 120 : P.bokeh[2]},${al})`; xb.beginPath(); xb.arc(bx, by, b.s, 0, TAU); xb.fill(); }
-      const gr = xb.createRadialGradient(cx, cy, 0, cx, cy, R * 1.05); gr.addColorStop(0, `rgba(${tint[0]},${tint[1]},${hot ? 140 : 255},${.16 * f + .03})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); xb.fillStyle = gr; xb.fillRect(0, 0, W, W);
+      const gr = xb.createRadialGradient(cx, cy, 0, cx, cy, R * 1.05); gr.addColorStop(0, `rgba(${tint[0]},${tint[1]},${hot ? 140 : tint[2]},${.16 * f + .03})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); xb.fillStyle = gr; xb.fillRect(0, 0, W, W);
       for (const d of dust) { d.a += d.v; const k = Math.sqrt(1 - d.y * d.y * .6), [x, y, z] = rot(Math.cos(d.a) * d.r * k, d.y * d.r * .9, Math.sin(d.a) * d.r * k, ang * .6, tilt); const al = (.08 + .3 * ((z + 1.5) / 3)) * (.6 + .4 * Math.sin(t * .0012 + d.ph)); xm.fillStyle = `rgba(${P.dust},${al})`; xm.fillRect(cx + x * R, cy + y * R, d.s, d.s); }
       const lvl = f * 2 - 1;
       for (let i = 0; i < GP.length; i++) {
