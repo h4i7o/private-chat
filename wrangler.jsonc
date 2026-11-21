@@ -13,7 +13,7 @@
       "binding": "DB",
       "database_name": "private-chat",
       // ローカル開発ではこの値のままで動きます。本番デプロイ前に `npx wrangler d1 create private-chat` で得たIDに置き換えます。
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "adad1dca-89b0-4c6f-8149-d9d559746a66",
       "migrations_dir": "migrations"
     }
   ],
