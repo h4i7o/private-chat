@@ -243,7 +243,7 @@ function setSide(v) { $('#shell').classList.toggle('sb-open', v); }
 $('#btnSide').onclick = () => setSide(!$('#shell').classList.contains('sb-open'));
 $('#btnSideIn').onclick = () => setSide(false); $('#scrim').onclick = () => setSide(false);
 $('#btnNew').onclick = () => { if (S.streaming) return busyToast(); cancelEdit(); S.chat = null; pvClose(); renderAll(); recount(true); $('#input').focus(); if (innerWidth <= 900) setSide(false); };
-$('#btnSettings').onclick = () => openSettings(); $('#sbAv').onclick = () => openSettings(isOwner() ? 'budget' : 'account');
+$('#sbAv').onclick = () => openSettings(isOwner() ? 'budget' : 'account');
 
 /* ---------- 見積もり(サーバーの値をそのまま使う) ---------- */
 const ZERO = { newTokens: 0, histTokens: 0, inputNano: 0, expectedNano: 0, worstNano: 0, gate: { ok: true } };
@@ -332,7 +332,7 @@ function renderSend() {
 }
 
 /* ---------- popovers ---------- */
-function closePop() { if (!S.pop) return; const p = S.pop; S.pop = null; setTimeout(tabSync, 0); p.el.classList.add('out'); p.el.style.pointerEvents = 'none'; if (window.gsap && !REDUCE) gsap.to(p.el, { opacity: 0, y: -8, scale: .97, duration: .2, ease: 'power2.in', onComplete: () => p.el.remove() }); else setTimeout(() => p.el.remove(), 210); if (p.anchor && p.anchor.setAttribute) p.anchor.setAttribute('aria-expanded', 'false'); }
+function closePop() { if (!S.pop) return; const p = S.pop; S.pop = null; setTimeout(tabSync, 0); p.el.classList.add('out'); p.el.style.pointerEvents = 'none'; if (window.gsap && !REDUCE) gsap.to(p.el, { opacity: 0, y: -6, scale: .98, duration: .24, ease: 'power2.inOut', onComplete: () => p.el.remove() }); else setTimeout(() => p.el.remove(), 210); if (p.anchor && p.anchor.setAttribute) p.anchor.setAttribute('aria-expanded', 'false'); }
 function openPop(anchor, kind, build, { w = 340, align = 'left' } = {}) {
   if (S.pop && S.pop.kind === kind) { closePop(); return; }
   closePop();
@@ -340,7 +340,7 @@ function openPop(anchor, kind, build, { w = 340, align = 'left' } = {}) {
   const r = anchor.getBoundingClientRect(); let left = align === 'right' ? r.right - w : r.left; left = Math.max(12, Math.min(innerWidth - w - 12, left));
   el.style.left = left + 'px'; el.style.top = r.bottom + 8 + 'px'; el.style.transformOrigin = (align === 'right' ? 'right' : 'left') + ' top';
   const pop = { kind, el, anchor, refresh() { const old = el.querySelector('[data-gauge]'); el.innerHTML = build(); const nw = el.querySelector('[data-gauge]'); if (nw && old && old._orb) nw.replaceWith(old); else if (nw) Orb.gauge(nw); } }; S.pop = pop; setTimeout(tabSync, 0); pop.refresh(); anchor.setAttribute && anchor.setAttribute('aria-expanded', 'true');
-  if (window.gsap && !REDUCE) { gsap.fromTo(el, { opacity: 0, y: -16, scale: .94 }, { opacity: 1, y: 0, scale: 1, duration: .55, ease: 'back.out(1.5)', clearProps: 'transform' }); gsap.from(el.querySelectorAll('.mrow,.grow2,.stack,.pfoot'), { opacity: 0, y: 8, duration: .45, stagger: .045, delay: .1, ease: 'power2.out', clearProps: 'opacity,transform' }); }
+  if (window.gsap && !REDUCE) { gsap.fromTo(el, { opacity: 0, y: -8, scale: .97 }, { opacity: 1, y: 0, scale: 1, duration: .42, ease: 'expo.out', clearProps: 'transform' }); gsap.from(el.querySelectorAll('.mrow,.grow2,.stack,.pfoot'), { opacity: 0, y: 6, duration: .5, stagger: .04, delay: .06, ease: 'expo.out', clearProps: 'opacity,transform' }); }
 }
 document.addEventListener('pointerdown', (e) => { if (S.pop && !S.pop.el.contains(e.target) && !(S.pop.anchor && S.pop.anchor.contains && S.pop.anchor.contains(e.target))) closePop(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (S.pop) closePop(); else if ($('.modal-bg')) closeModal(); else if (S.edit) cancelEdit(); else if (S.pv.open && innerWidth <= 900) pvClose(); } });
@@ -534,8 +534,13 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
 
   const outPrice = (S.models[k]?.out || 10000);
   let raf = 0, serverDone = null, failure = null, gotMeta = false;
-  const paint = () => {
-    raf = 0; renderAiBody(body, ai, true);
+  let shown = 0, lastP = 0;
+  const paint = (now) => {
+    raf = 0;
+    const len = ai.text.length, back = len - shown;
+    if (back > 0) { shown = Math.min(len, shown + Math.max(2, Math.ceil(back * .16))); if (ai.text.charCodeAt(shown - 1) >= 0xD800 && ai.text.charCodeAt(shown - 1) < 0xDC00) shown++; }
+    renderAiBody(body, { ...ai, text: ai.text.slice(0, shown) }, true);
+    if (shown < len && !raf) raf = requestAnimationFrame(paint);
     S.live = q.inputNano + estText(ai.text) * outPrice + (ai.meta.searches || 0) * 1e7;
     renderBudget(); renderMeter();
     if (mode !== 'compact') { const h = extractHtml(ai.text); if (h) pvStream(h.html, h.done); }
@@ -616,19 +621,13 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
 function renderThread() {
   const t = $('#thread'), c = S.chat;
   if (!c || !c.msgs.length) {
-    t.innerHTML = `<div class="empty"><div class="orb-wrap"><canvas data-orb="hero" data-size="132"></canvas></div><div class="sugg"><button class="sg" data-sg="html">${ic('code')}HTML</button><button class="sg" data-sg="web">${ic('globe')}Web</button><button class="sg" data-sg="file">${ic('clip')}File</button></div></div>`; Orb.scan(t); return;
+    t.innerHTML = '<div class="empty"><div class="hero-orb"><div class="gws" data-gauge data-size="188"></div></div></div>'; Orb.scan(t); return;
   }
   t.innerHTML = '';
   c.msgs.forEach((m) => { if (m.role === 'user') t.insertAdjacentHTML('beforeend', userHTML(m)); else { const el = isSum(m) ? addSumDOM(m, true) : addAiDOM(m, true); renderAiBody(el.querySelector('.ai-body'), m, false); finishAiDOM(el, m, true); } });
   scrollEnd(true); markEdit();
 }
 $('#thread').addEventListener('click', (e) => {
-  const sg = e.target.closest('[data-sg]');
-  if (sg) {
-    const k = sg.dataset.sg;
-    if (k === 'html') input.value = '時計のHTMLを作って'; else if (k === 'web') { input.value = '今日の主要ニュースを調べて'; S.search = true; renderSearch(); } else { $('#file').click(); return; }
-    S.text = input.value; autosize(); recount(true); input.focus(); return;
-  }
   const ed = e.target.closest('[data-edit]'); if (ed) return startEdit(ed.dataset.edit);
   const afc = e.target.closest('.afc');
   if (afc) { const f = fileSrc.get(afc.dataset.k); if (!f) return; if (e.target.closest('[data-act="fdl"]')) return dlFile(f); return fileOpen(f); }
@@ -714,10 +713,29 @@ function updateThink(el, m, streaming) {
   box.classList.remove('live');
   const tb = box.querySelector('.tb'); if (tb.textContent !== t) tb.textContent = t;
 }
+/* diff the rendered blocks instead of replacing the whole body: finished blocks stay untouched, new blocks fade in */
+function patchBody(body, html, animate) {
+  const tpl = document.createElement('template'); tpl.innerHTML = html;
+  const next = [...tpl.content.children], cur = [...body.children].filter((n) => !n.classList.contains('caret'));
+  next.forEach((n, i) => {
+    const h = n.outerHTML, o = cur[i];
+    if (o && o._h === h) return;
+    if (o && o.tagName === n.tagName) {
+      o.innerHTML = n.innerHTML; for (const a of [...o.attributes]) if (a.name !== 'class' && !n.hasAttribute(a.name)) o.removeAttribute(a.name);
+      for (const a of n.attributes) if (a.name !== 'class') o.setAttribute(a.name, a.value);
+      o.className = n.className + (o.classList.contains('in') ? ' in' : ''); o._h = h; return;
+    }
+    n._h = h; if (animate) n.classList.add('in');
+    if (o) body.replaceChild(n, o); else { const cr = body.querySelector(':scope > .caret'); body.insertBefore(n, cr); }
+  });
+  for (let i = cur.length - 1; i >= next.length; i--) cur[i].remove();
+}
 function renderAiBody(body, m, streaming) {
   const el = body.closest('.msg'); updateThink(el, m, streaming);
   if (!m.text && streaming) return;
-  body.innerHTML = md(m.text, m.meta && m.meta.cites, m.meta && m.meta.sources) + (m.meta?.error && !streaming ? `<p style="color:var(--bad)">${esc(m.meta.error)}</p>` : '') + (streaming ? '<span class="caret"></span>' : '');
+  if (!streaming) { body.querySelectorAll(':scope > .caret').forEach((c) => c.remove()); }
+  patchBody(body, md(m.text, m.meta && m.meta.cites, m.meta && m.meta.sources) + (m.meta?.error && !streaming ? `<p style="color:var(--bad)">${esc(m.meta.error)}</p>` : ''), streaming);
+  if (streaming && !body.querySelector(':scope > .caret')) body.insertAdjacentHTML('beforeend', '<span class="caret"></span>');
   body.querySelectorAll('.code.open pre').forEach((p) => { p.scrollTop = p.scrollHeight; });
   hydrateMermaid(body);
 }
@@ -776,7 +794,7 @@ async function switchVer(d) {
     renderPvBtn(); recount(true);
   } catch (e) { toast(e.message, 'x', 'bad'); }
 }
-function scrollEnd(force) { const s = $('#scroll'); const near = s.scrollHeight - s.scrollTop - s.clientHeight < 160; if (force || near) s.scrollTo({ top: s.scrollHeight, behavior: force ? 'auto' : 'smooth' }); }
+function scrollEnd(force) { const s = $('#scroll'); const near = s.scrollHeight - s.scrollTop - s.clientHeight < 160; if (force || near) s.scrollTo({ top: s.scrollHeight, behavior: force || S.streaming ? 'instant' : 'smooth' }); }
 $('#scroll').addEventListener('scroll', (e) => $('#top').classList.toggle('scrolled', e.target.scrollTop > 8));
 
 /* ---------- markdown(最小限) ---------- */
@@ -999,20 +1017,28 @@ $('#pvDev').addEventListener('click', (e) => { const b = e.target.closest('butto
 addEventListener('resize', () => { setSeg('#pvMode'); setSeg('#pvDev'); });
 
 /* ---------- 設定 ---------- */
-function closeModal() { const m = $('.modal-bg'); if (!m) return; m.classList.add('out'); setTimeout(() => { m.remove(); tabSync(); }, 260); }
+function closeModal() { const m = $('.modal-bg:not(.out)'); if (!m) return; m.classList.add('out'); tabSync(); setTimeout(() => { m.remove(); }, 380); }
 async function openSettings(tab) {
-  closePop(); closeModal();
+  closePop(); { const o = $('.modal-bg'); if (o) o.remove(); }
   const tabs = isOwner() ? [['budget', 'gauge', 'Budget'], ['models', 'sparkle', 'Models'], ['memory', 'memory', 'Memory'], ['users', 'users', 'Users'], ['account', 'user', 'Account']] : [['account', 'user', 'Account'], ['memory', 'memory', 'Memory']];
   tab = tabs.some((t) => t[0] === tab) ? tab : tabs[0][0];
   setTimeout(tabSync, 0); const bg = document.createElement('div'); bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal"><nav class="m-nav"></nav><div class="m-main"></div></div>'; $('#layer').appendChild(bg);
   bg.addEventListener('pointerdown', (e) => { if (e.target === bg) closeModal(); });
   const nav = bg.querySelector('.m-nav'), main = bg.querySelector('.m-main');
-  const draw = async (t) => {
-    tab = t; nav.innerHTML = tabs.map((x) => `<button data-t="${x[0]}" class="${x[0] === t ? 'on' : ''}">${ic(x[1])}${x[2]}</button>`).join('') + '<div class="grow"></div><button data-x>' + ic('x') + '</button>';
+  const navHTML = (t) => tabs.map((x) => `<button data-t="${x[0]}" class="${x[0] === t ? 'on' : ''}">${ic(x[1])}${x[2]}</button>`).join('') + '<div class="grow"></div><button data-x>' + ic('x') + '</button>';
+  let cur = null, seq = 0;
+  const draw = async (t, keep) => {
+    const my = ++seq, y = main.scrollTop, sw = cur !== t;
     let html; try { html = await TABS[t](); } catch (e) { html = `<div class="auth-err on">${esc(e.message)}</div>`; }
-    main.innerHTML = '<div>' + html + '</div>'; main.scrollTop = 0; bindTab(main, () => draw(t));
+    if (my !== seq || !bg.isConnected) return;
+    const fa = document.activeElement, fk = keep && fa && main.contains(fa) ? (fa.dataset.medit ? '[data-medit="' + fa.dataset.medit + '"]' : fa.id ? '#' + fa.id : null) : null;
+    if (sw) { cur = t; nav.innerHTML = navHTML(t); }
+    let box = main.firstElementChild;
+    if (!box || sw) { main.innerHTML = '<div class="m-in">' + html + '</div>'; main.scrollTop = 0; }
+    else { box.innerHTML = html; main.scrollTop = y; if (fk) { const n = main.querySelector(fk); if (n) n.focus({ preventScroll: true }); } }
+    bindTab(main, () => draw(t, true));
   };
-  nav.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-x')) closeModal(); else if (b.dataset.t) draw(b.dataset.t); });
+  nav.addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; if (b.hasAttribute('data-x')) closeModal(); else if (b.dataset.t && b.dataset.t !== cur) draw(b.dataset.t); });
   draw(tab);
 }
 const row = (lb, val, sub) => `<div class="row"><div class="lb">${lb}${sub ? `<small>${sub}</small>` : ''}</div>${val ? `<div class="val">${val}</div>` : ''}</div>`;
@@ -1146,7 +1172,12 @@ const COARSE = matchMedia('(hover:none) and (pointer:coarse)').matches; // タ�
     root.classList.toggle('kb', h < maxH - 120); // キーボード表示中
     if (document.activeElement === input) scrollEnd(true);
   };
-  input.addEventListener('focus', () => { [0, 80, 200, 400].forEach((ms) => setTimeout(() => { window.scrollTo(0, 0); fit(); }, ms)); });
+  // iOS scrolls the whole page to reveal a tapped field, which is the jolt. Focus without scrolling; the shell follows the visual viewport instead.
+  input.addEventListener('touchend', (e) => {
+    if (document.activeElement === input || !e.cancelable) return;
+    e.preventDefault(); input.focus({ preventScroll: true }); const n = input.value.length; try { input.setSelectionRange(n, n); } catch { /* */ }
+  }, { passive: false });
+  input.addEventListener('focus', () => { window.scrollTo(0, 0); [60, 220].forEach((ms) => setTimeout(() => { window.scrollTo(0, 0); fit(); }, ms)); });
   if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', () => { window.scrollTo(0, 0); fit(); }); }
   addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 250)); fit();
   const sc = document.querySelector('#scroll'); let pinned = true;
@@ -1161,7 +1192,7 @@ const COARSE = matchMedia('(hover:none) and (pointer:coarse)').matches; // タ�
 
 /* ---------- tab bar: bottom on phones, right edge on desktop ---------- */
 function tabSync() {
-  const on = S.pop && S.pop.kind === 'budget' ? 'budget' : $('.modal-bg') ? 'settings' : 'chats';
+  const on = S.pop && S.pop.kind === 'budget' ? 'budget' : $('.modal-bg:not(.out)') ? 'settings' : 'chats';
   document.querySelectorAll('#tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.t === on));
 }
 (function () {
@@ -1169,11 +1200,12 @@ function tabSync() {
   tb.addEventListener('pointerdown', () => { wasBudget = !!(S.pop && S.pop.kind === 'budget'); }, true);
   tb.addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
-    const t = b.dataset.t;
+    const t = b.dataset.t, modal = !!$('.modal-bg:not(.out)');
+    if (t === 'settings') { if (modal) closeModal(); else openSettings(); return; }
+    if (modal) closeModal();
     if (t === 'chats') $('#btnSide').click();
     else if (t === 'new') $('#btnNew').click();
     else if (t === 'budget') { if (wasBudget) return; $('#btnBudget').click(); }
-    else if (t === 'settings') { if (S.pop) closePop(); $('#btnSettings').click(); }
   });
   tabSync();
 })();
@@ -1187,8 +1219,8 @@ if ('serviceWorker' in navigator) addEventListener('load', () => { navigator.ser
 if (window.gsap && !REDUCE) {
   document.querySelectorAll('.bgfx i:nth-child(-n+3)').forEach((b, i) => gsap.to(b, { x: () => gsap.utils.random(-60, 60), y: () => gsap.utils.random(-70, 70), duration: gsap.utils.random(11, 16), ease: 'sine.inOut', yoyo: true, repeat: -1, delay: -i * 2.2 }));
   const PRESS = '.ib,.tog,.pill,.chip,.send,.go,.btn';
-  document.addEventListener('pointerdown', (e) => { const b = e.target.closest(PRESS); if (b && !b.disabled) gsap.to(b, { scale: .92, duration: .12, ease: 'power2.out', overwrite: 'auto' }); });
-  const rel = (e) => { const b = e.target.closest && e.target.closest(PRESS); if (b) gsap.to(b, { scale: 1, duration: .55, ease: 'elastic.out(1,.55)', overwrite: 'auto', clearProps: 'scale' }); };
+  document.addEventListener('pointerdown', (e) => { const b = e.target.closest(PRESS); if (b && !b.disabled) gsap.to(b, { scale: .94, duration: .18, ease: 'power2.out', overwrite: 'auto' }); });
+  const rel = (e) => { const b = e.target.closest && e.target.closest(PRESS); if (b) gsap.to(b, { scale: 1, duration: .45, ease: 'expo.out', overwrite: 'auto', clearProps: 'scale' }); };
   ['pointerup', 'pointercancel', 'pointerout'].forEach((k) => document.addEventListener(k, rel));
 }
 

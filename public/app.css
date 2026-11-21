@@ -944,3 +944,70 @@ body::after{display:none}
 .chat{background:linear-gradient(180deg,var(--p2),transparent 40%),color-mix(in srgb,var(--bg) 30%,transparent)}
 @media (max-width:900px){.chat,.shell.pv-open .chat{background:none}}
 body::before{display:none}
+
+/* ======================================================================
+   v8: near-black backdrop with one soft light, calm motion, phone sizing
+   ====================================================================== */
+:root{--ease:cubic-bezier(.16,1,.3,1);--spring:cubic-bezier(.16,1,.3,1);--ease-io:cubic-bezier(.65,0,.35,1)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bgA:#5a5a62;--bgB:#161618;--bgC:#0a0a0b;
+--g1:rgba(255,255,255,.045);--g2:rgba(200,200,210,.05);--g3:rgba(180,180,190,.055);--g4:rgba(224,224,232,.26);--g5:rgba(255,255,255,.03);--codesolid:#101012}
+:root:not([data-theme="light"]){background:radial-gradient(120% 95% at 100% 100%,var(--bgA) 0,transparent 68%),linear-gradient(160deg,var(--bgB),var(--bgC))}
+:root:not([data-theme="light"]) .bgfx{background:radial-gradient(120% 95% at 100% 100%,var(--bgA) 0,transparent 68%),linear-gradient(160deg,var(--bgB),var(--bgC))}}
+:root[data-theme="dark"]{--bgA:#5a5a62;--bgB:#161618;--bgC:#0a0a0b;
+--g1:rgba(255,255,255,.045);--g2:rgba(200,200,210,.05);--g3:rgba(180,180,190,.055);--g4:rgba(224,224,232,.26);--g5:rgba(255,255,255,.03);--codesolid:#101012}
+:root[data-theme="dark"]{background:radial-gradient(120% 95% at 100% 100%,var(--bgA) 0,transparent 68%),linear-gradient(160deg,var(--bgB),var(--bgC))}
+:root[data-theme="dark"] .bgfx{background:radial-gradient(120% 95% at 100% 100%,var(--bgA) 0,transparent 68%),linear-gradient(160deg,var(--bgB),var(--bgC))}
+:root{--codesolid:#f1f1f4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--codesolid:#101012}}
+:root[data-theme="light"]{--codesolid:#f1f1f4}
+:root[data-theme="dark"]{--codesolid:#101012}
+
+/* code blocks read as solid surfaces, also on phones */
+.code,.pv-code{background:var(--codesolid)}
+
+/* empty chat: just the sparkle sphere */
+.hero-orb{position:relative;width:188px;height:188px;animation:heroIn 1.2s var(--ease) both}
+.hero-orb .gws{cursor:grab}
+.empty{gap:0}
+@keyframes heroIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+
+/* motion: opacity + transform only, long ease-out tails */
+@keyframes rise{from{opacity:0;transform:translate3d(0,10px,0)}to{opacity:1;transform:none}}
+@keyframes blockIn{from{opacity:0;transform:translate3d(0,7px,0)}to{opacity:1;transform:none}}
+@keyframes cardIn{from{opacity:0;transform:translate3d(0,18px,0) scale(.98)}to{opacity:1;transform:none}}
+@keyframes modalIn{from{opacity:0;transform:translate3d(0,10px,0) scale(.97)}to{opacity:1;transform:none}}
+@keyframes modalOut{to{opacity:0;transform:translate3d(0,6px,0) scale(.985)}}
+@keyframes fadeOut{to{opacity:0}}
+.msg{animation:rise .6s var(--ease) both}
+.ai-body>.in{animation:blockIn .7s var(--ease) both}
+.ai-body>.caret{animation:none}
+.modal{animation:modalIn .5s var(--ease) both}
+.modal-bg{animation:fade .4s var(--ease) both}
+.modal-bg.out{animation:fadeOut .3s var(--ease-io) both;pointer-events:none}
+.modal-bg.out .modal{animation:modalOut .3s var(--ease-io) both}
+.m-main>.m-in{animation:rise .45s var(--ease) both}
+.m-main>div:not(.m-in){animation:none}
+.ib,.tog,.pill,.chip,.btn,.send,.tab,.sw{transition-timing-function:var(--ease)}
+.sidebar{transition-timing-function:var(--ease)}
+
+/* scroll area fades out instead of being cut at the top and bottom edges */
+.scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 calc(var(--sat) + 50px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52));mask-image:linear-gradient(to bottom,transparent 0,#000 calc(var(--sat) + 50px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52))}
+.dock{background:none}
+.top.scrolled{background:none}
+
+/* phones: tab bar and composer a touch smaller */
+@media (max-width:900px){
+  :root{--tab-h:46px}
+  .tabbar{padding:4px;gap:3px;border-radius:24px;bottom:calc(8px + var(--sab))}
+  .tabbar button{width:42px;height:36px;border-radius:18px}
+  .tabbar .i{width:20px;height:20px}
+  .dock{padding-bottom:calc(10px + var(--sab) + var(--tab-h))}
+  .composer{padding:9px 9px 7px;gap:5px}
+  .composer.glass{border-radius:26px}
+  .composer .ib,.composer .tog,.crow .ib,.crow .tog{width:34px;height:34px}
+  .send{width:36px;height:36px}
+  .nums{font-size:11.5px;gap:8px}
+  .pfoot .chip,.pfoot .tog{transform:none}
+}
+/* keyboard: follow the visual viewport with the system keyboard curve */
+.shell{transition:opacity .7s var(--ease),height .3s cubic-bezier(.2,.8,.2,1)}
