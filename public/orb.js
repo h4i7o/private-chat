@@ -2,7 +2,7 @@
 (() => {
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const dark = matchMedia('(prefers-color-scheme: dark)');
-  const DPR = () => Math.min(2.5, window.devicePixelRatio || 1);
+  const DPR = () => Math.min(2, window.devicePixelRatio || 1);
   const TAU = Math.PI * 2;
   const st = { state: 'idle', used: 0 };
   const items = new Set();
@@ -48,7 +48,7 @@
     w.style.width = size + 'px'; w.style.height = size + 'px';
     const cb = document.createElement('canvas'), cm = document.createElement('canvas'); cb.className = 'gb'; cm.className = 'gm'; w.append(cb, cm);
     const xb = setup(cb, size), xm = setup(cm, size);
-    const GP = fib(900);
+    const GP = fib(640);
     const dust = Array.from({ length: 220 }, () => ({ a: Math.random() * TAU, r: 1.08 + Math.random() * .5, y: Math.random() * 2 - 1, v: (Math.random() - .5) * .0004, s: Math.random() * .9 + .3, ph: Math.random() * 9 }));
     const bokeh = Array.from({ length: 16 }, () => ({ a: Math.random() * TAU, r: .2 + Math.random() * .9, y: Math.random() * 1.6 - .8, v: (Math.random() - .5) * .0003, s: size * .035 + Math.random() * size * .07, ph: Math.random() * 9 }));
     let drag = 0, vel = 0, dragging = false, lx = 0, used = st.used;
@@ -82,8 +82,11 @@
   }
 
   let raf = 0;
+  let last = 0;
   function frame(t) {
     raf = 0;
+    if (t - last < 28) { if (items.size && !reduce && !document.hidden) raf = requestAnimationFrame(frame); return; }
+    last = t;
     for (const it of items) { if (!it.c.isConnected) { items.delete(it); continue; } if (it.c.offsetParent === null && !it.c.closest('.pop')) continue; it.draw(t); }
     if (items.size && !reduce && !document.hidden) raf = requestAnimationFrame(frame);
   }

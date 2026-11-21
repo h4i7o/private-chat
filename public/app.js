@@ -176,7 +176,7 @@ addEventListener('focus', refreshLedger);
 /* ---------- rendering: shell ---------- */
 function renderAll() { renderEditBar(); renderModelChip(); renderBudget(); renderMeter(); renderAtts(); renderSearch(); renderList(); renderThread(); renderSend(); renderPvBtn(); }
 function renderModelChip() { const m = MODELS[S.model]; $('#btnModel').innerHTML = `<span class="mi ${S.model}">${ic(m.icon, 'sm')}</span><span class="mn">${mn(m.name)}</span>${ic('chev', 'sm chev')}`; }
-function renderMem() { const b = $('#btnMem'); b.classList.toggle('on', S.mem); b.setAttribute('aria-pressed', S.mem); b.querySelector('sup').textContent = S.memCount; }
+function renderMem() { const b = $('#btnMem'); b.classList.toggle('on', S.mem); b.setAttribute('aria-pressed', S.mem); const sp = b.querySelector('sup'); sp.textContent = S.memCount; sp.hidden = !S.memCount; }
 async function loadMemCount() { try { S.memCount = (await req('/memories')).memories.length; } catch { /* 0のまま */ } renderMem(); }
 $('#btnMem').onclick = () => { if (S.streaming) return; S.mem = !S.mem; lsSet('pc.mem', S.mem ? '1' : '0'); renderMem(); recount(true); toast(S.mem ? 'Memory on' : 'Memory off', 'memory'); };
 function renderSearch() {
@@ -332,14 +332,14 @@ function renderSend() {
 }
 
 /* ---------- popovers ---------- */
-function closePop() { if (!S.pop) return; const p = S.pop; S.pop = null; p.el.classList.add('out'); p.el.style.pointerEvents = 'none'; if (window.gsap && !REDUCE) gsap.to(p.el, { opacity: 0, y: -8, scale: .97, duration: .2, ease: 'power2.in', onComplete: () => p.el.remove() }); else setTimeout(() => p.el.remove(), 210); if (p.anchor && p.anchor.setAttribute) p.anchor.setAttribute('aria-expanded', 'false'); }
+function closePop() { if (!S.pop) return; const p = S.pop; S.pop = null; setTimeout(tabSync, 0); p.el.classList.add('out'); p.el.style.pointerEvents = 'none'; if (window.gsap && !REDUCE) gsap.to(p.el, { opacity: 0, y: -8, scale: .97, duration: .2, ease: 'power2.in', onComplete: () => p.el.remove() }); else setTimeout(() => p.el.remove(), 210); if (p.anchor && p.anchor.setAttribute) p.anchor.setAttribute('aria-expanded', 'false'); }
 function openPop(anchor, kind, build, { w = 340, align = 'left' } = {}) {
   if (S.pop && S.pop.kind === kind) { closePop(); return; }
   closePop();
   const el = document.createElement('div'); el.className = 'pop glass'; el.style.width = w + 'px'; $('#layer').appendChild(el);
   const r = anchor.getBoundingClientRect(); let left = align === 'right' ? r.right - w : r.left; left = Math.max(12, Math.min(innerWidth - w - 12, left));
   el.style.left = left + 'px'; el.style.top = r.bottom + 8 + 'px'; el.style.transformOrigin = (align === 'right' ? 'right' : 'left') + ' top';
-  const pop = { kind, el, anchor, refresh() { const old = el.querySelector('[data-gauge]'); el.innerHTML = build(); const nw = el.querySelector('[data-gauge]'); if (nw && old && old._orb) nw.replaceWith(old); else if (nw) Orb.gauge(nw); } }; S.pop = pop; pop.refresh(); anchor.setAttribute && anchor.setAttribute('aria-expanded', 'true');
+  const pop = { kind, el, anchor, refresh() { const old = el.querySelector('[data-gauge]'); el.innerHTML = build(); const nw = el.querySelector('[data-gauge]'); if (nw && old && old._orb) nw.replaceWith(old); else if (nw) Orb.gauge(nw); } }; S.pop = pop; setTimeout(tabSync, 0); pop.refresh(); anchor.setAttribute && anchor.setAttribute('aria-expanded', 'true');
   if (window.gsap && !REDUCE) { gsap.fromTo(el, { opacity: 0, y: -16, scale: .94 }, { opacity: 1, y: 0, scale: 1, duration: .55, ease: 'back.out(1.5)', clearProps: 'transform' }); gsap.from(el.querySelectorAll('.mrow,.grow2,.stack,.pfoot'), { opacity: 0, y: 8, duration: .45, stagger: .045, delay: .1, ease: 'power2.out', clearProps: 'opacity,transform' }); }
 }
 document.addEventListener('pointerdown', (e) => { if (S.pop && !S.pop.el.contains(e.target) && !(S.pop.anchor && S.pop.anchor.contains && S.pop.anchor.contains(e.target))) closePop(); });
@@ -354,9 +354,9 @@ function modelPopHTML() {
     return `<button class="mrow ${k === S.model ? 'sel' : ''}" data-model="${k}"><span class="mi ${k}">${ic(m.icon)}</span><span class="nm"><span class="mn">${mn(m.name)}</span><span>${priceLabel(k)}</span></span><span class="rt"><span class="v">${dm('+' + fmtPct(pctOf(q.expectedNano)) + '%')}</span><span class="v2">${ic('bolt', 'sm')}${dm(fmtPct(pctOf(q.worstNano)) + '%')}</span></span><span class="ck">${ic('check', 'sm')}</span></button>`; }).join('');
   const eff = S.config.effortMode === 'select'
     ? `<div class="seg3" data-eff>${['low', 'medium', 'high'].map((e) => `<button data-eff-v="${e}" class="${S.effort === e ? 'on' : ''}">${EFF_LABEL[e]}</button>`).join('')}</div>`
-    : `<span class="lkc">${ic('lock', 'sm')}Effort Med</span>`;
+    : `<span class="lkc">${ic('sliders', 'sm')}Med</span>`;
   const auto = S.config.permission === 'auto';
-  return rows + `<div class="pfoot">${eff}<span class="lkc">${ic(auto ? 'unlock' : 'lock', 'sm')}Search ${auto ? 'auto' : 'manual'}</span><span class="lkc">${ic('tok', 'sm')}${fmtK(S.maxTokens[S.model] || 0)}</span></div>`;
+  return rows + `<div class="pfoot">${eff}<span class="lkc">${ic('globe', 'sm')}${auto ? 'Auto' : 'Manual'}</span><span class="lkc">${ic('tok', 'sm')}${fmtK(S.maxTokens[S.model] || 0)}</span></div>`;
 }
 function budgetPopHTML() {
   const used = usedNano(), pct = pctOf(used), tot = Math.max(1, Object.values(S.ledger.byModel).reduce((a, b) => a + b, 0));
@@ -999,12 +999,12 @@ $('#pvDev').addEventListener('click', (e) => { const b = e.target.closest('butto
 addEventListener('resize', () => { setSeg('#pvMode'); setSeg('#pvDev'); });
 
 /* ---------- 設定 ---------- */
-function closeModal() { const m = $('.modal-bg'); if (!m) return; m.classList.add('out'); setTimeout(() => m.remove(), 260); }
+function closeModal() { const m = $('.modal-bg'); if (!m) return; m.classList.add('out'); setTimeout(() => { m.remove(); tabSync(); }, 260); }
 async function openSettings(tab) {
   closePop(); closeModal();
   const tabs = isOwner() ? [['budget', 'gauge', 'Budget'], ['models', 'sparkle', 'Models'], ['memory', 'memory', 'Memory'], ['users', 'users', 'Users'], ['account', 'user', 'Account']] : [['account', 'user', 'Account'], ['memory', 'memory', 'Memory']];
   tab = tabs.some((t) => t[0] === tab) ? tab : tabs[0][0];
-  const bg = document.createElement('div'); bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal"><nav class="m-nav"></nav><div class="m-main"></div></div>'; $('#layer').appendChild(bg);
+  setTimeout(tabSync, 0); const bg = document.createElement('div'); bg.className = 'modal-bg'; bg.innerHTML = '<div class="modal"><nav class="m-nav"></nav><div class="m-main"></div></div>'; $('#layer').appendChild(bg);
   bg.addEventListener('pointerdown', (e) => { if (e.target === bg) closeModal(); });
   const nav = bg.querySelector('.m-nav'), main = bg.querySelector('.m-main');
   const draw = async (t) => {
@@ -1146,6 +1146,7 @@ const COARSE = matchMedia('(hover:none) and (pointer:coarse)').matches; // タ�
     root.classList.toggle('kb', h < maxH - 120); // キーボード表示中
     if (document.activeElement === input) scrollEnd(true);
   };
+  input.addEventListener('focus', () => { [0, 80, 200, 400].forEach((ms) => setTimeout(() => { window.scrollTo(0, 0); fit(); }, ms)); });
   if (vv) { vv.addEventListener('resize', fit); vv.addEventListener('scroll', () => { window.scrollTo(0, 0); fit(); }); }
   addEventListener('resize', fit); addEventListener('orientationchange', () => setTimeout(fit, 250)); fit();
   const sc = document.querySelector('#scroll'); let pinned = true;
@@ -1158,6 +1159,25 @@ const COARSE = matchMedia('(hover:none) and (pointer:coarse)').matches; // タ�
   document.addEventListener('touchmove', (e) => { if (e.touches.length > 1 || (e.scale && e.scale !== 1)) e.preventDefault(); }, { passive: false });
 })();
 
+/* ---------- tab bar: bottom on phones, right edge on desktop ---------- */
+function tabSync() {
+  const on = S.pop && S.pop.kind === 'budget' ? 'budget' : $('.modal-bg') ? 'settings' : 'chats';
+  document.querySelectorAll('#tabbar button').forEach((b) => b.classList.toggle('on', b.dataset.t === on));
+}
+(function () {
+  const tb = $('#tabbar'); let wasBudget = false;
+  tb.addEventListener('pointerdown', () => { wasBudget = !!(S.pop && S.pop.kind === 'budget'); }, true);
+  tb.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    const t = b.dataset.t;
+    if (t === 'chats') $('#btnSide').click();
+    else if (t === 'new') $('#btnNew').click();
+    else if (t === 'budget') { if (wasBudget) return; $('#btnBudget').click(); }
+    else if (t === 'settings') { if (S.pop) closePop(); $('#btnSettings').click(); }
+  });
+  tabSync();
+})();
+
 /* ---------- PWA ---------- */
 addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); S.installEv = e; });
 addEventListener('appinstalled', () => { S.installEv = null; });
@@ -1165,8 +1185,7 @@ if ('serviceWorker' in navigator) addEventListener('load', () => { navigator.ser
 
 /* ---------- motion (GSAP): background drift, press feel, send glow ---------- */
 if (window.gsap && !REDUCE) {
-  document.querySelectorAll('.bgfx i').forEach((b, i) => gsap.to(b, { x: () => gsap.utils.random(-70, 70), y: () => gsap.utils.random(-80, 80), scale: () => gsap.utils.random(.9, 1.18), duration: gsap.utils.random(9, 14), ease: 'sine.inOut', yoyo: true, repeat: -1, delay: -i * 2.2 }));
-  gsap.fromTo('#btnSend', { '--gl': .12 }, { '--gl': .4, duration: 2.4, yoyo: true, repeat: -1, ease: 'sine.inOut' });
+  document.querySelectorAll('.bgfx i:nth-child(-n+3)').forEach((b, i) => gsap.to(b, { x: () => gsap.utils.random(-60, 60), y: () => gsap.utils.random(-70, 70), duration: gsap.utils.random(11, 16), ease: 'sine.inOut', yoyo: true, repeat: -1, delay: -i * 2.2 }));
   const PRESS = '.ib,.tog,.pill,.chip,.send,.go,.btn';
   document.addEventListener('pointerdown', (e) => { const b = e.target.closest(PRESS); if (b && !b.disabled) gsap.to(b, { scale: .92, duration: .12, ease: 'power2.out', overwrite: 'auto' }); });
   const rel = (e) => { const b = e.target.closest && e.target.closest(PRESS); if (b) gsap.to(b, { scale: 1, duration: .55, ease: 'elastic.out(1,.55)', overwrite: 'auto', clearProps: 'scale' }); };

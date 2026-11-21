@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex,nofollow">
-<meta name="theme-color" content="#2a2a2f" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#ececf1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#2b2b30" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#e6e6ea" media="(prefers-color-scheme: light)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -136,6 +136,12 @@
         <input type="file" id="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,.txt,.md,.csv,.json,.html,.css,.js,.ts,.py,.xml,.yaml,.yml,.log">
       </div>
     </div>
+    <nav class="tabbar" id="tabbar" aria-label="Navigation">
+      <button data-t="chats" aria-label="Chats"><svg class="i"><use href="#i-chat"/></svg></button>
+      <button data-t="new" aria-label="New chat"><svg class="i"><use href="#i-plus"/></svg></button>
+      <button data-t="budget" aria-label="Budget"><svg class="i"><use href="#i-gauge"/></svg></button>
+      <button data-t="settings" aria-label="Settings"><svg class="i"><use href="#i-sliders"/></svg></button>
+    </nav>
   </main>
 
   <section class="preview" id="preview" aria-label="Preview">

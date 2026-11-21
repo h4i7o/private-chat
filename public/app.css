@@ -870,3 +870,77 @@ body::before{display:none}
 .mrow .nm .mn{font-size:19px;color:var(--text);line-height:1}
 .mrow .nm .mn b{font-size:12.5px;color:var(--text-2)}
 .mrow .nm>span:not(.mn){font-size:12px;color:var(--text-3)}
+
+/* ======================================================================
+   v7: lighter (no big blur layers), darker grey backdrop, full-bleed phones, tab bar
+   ====================================================================== */
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bgA:#3f3f46;--bgB:#27272c;--bgC:#151518;
+--g1:rgba(240,240,246,.5);--g2:rgba(180,180,192,.3);--g3:rgba(150,150,162,.34);--g4:rgba(200,190,176,.10);--g5:rgba(255,255,255,.07);}}
+:root[data-theme="dark"]{--bgA:#3f3f46;--bgB:#27272c;--bgC:#151518;
+--g1:rgba(240,240,246,.5);--g2:rgba(180,180,192,.3);--g3:rgba(150,150,162,.34);--g4:rgba(200,190,176,.10);--g5:rgba(255,255,255,.07);}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--g1:rgba(255,255,255,.9);--g2:rgba(180,181,190,.55);--g3:rgba(165,166,175,.5);--g4:rgba(228,217,202,.5);--g5:rgba(255,255,255,.5);}}
+:root[data-theme="light"]{--g1:rgba(255,255,255,.9);--g2:rgba(180,181,190,.55);--g3:rgba(165,166,175,.5);--g4:rgba(228,217,202,.5);--g5:rgba(255,255,255,.5);}
+
+html{background:linear-gradient(170deg,var(--bgA),var(--bgB) 52%,var(--bgC))}
+html,body{position:fixed;inset:0;width:100%;overflow:hidden}
+body::after{display:none}
+.bgfx{inset:-14vh 0;background:linear-gradient(170deg,var(--bgA),var(--bgB) 52%,var(--bgC))}
+.bgfx i{filter:none;opacity:1;border-radius:0;will-change:transform}
+.bgfx i:nth-child(1){width:130vmax;height:130vmax;left:-62vmax;top:-66vmax;background:radial-gradient(closest-side,var(--g1),transparent)}
+.bgfx i:nth-child(2){width:110vmax;height:110vmax;right:-62vmax;top:6vh;background:radial-gradient(closest-side,var(--g2),transparent)}
+.bgfx i:nth-child(3){width:120vmax;height:120vmax;left:-56vmax;bottom:-62vmax;background:radial-gradient(closest-side,var(--g3),transparent)}
+.bgfx i:nth-child(4){width:70vmax;height:70vmax;right:-14vmax;bottom:-24vmax;background:radial-gradient(closest-side,var(--g4),transparent)}
+.bgfx i:nth-child(5){width:60vmax;height:60vmax;left:22vw;top:26vh;background:radial-gradient(closest-side,var(--g5),transparent)}
+.bgfx::after{mix-blend-mode:normal;opacity:.05}
+
+/* blur only where content scrolls underneath */
+.glass,.top.scrolled,.sidebar,.preview,.toast,.tab,.send,.bubble,.sg,.crow .ib,.crow .tog,.pill,.chip,.top .ib{-webkit-backdrop-filter:none;backdrop-filter:none}
+.composer.glass,.top .chip,.top .pill,.top .ib,.sidebar,.toast,.tabbar,.card.glass{-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}
+.pop.glass,.modal{-webkit-backdrop-filter:blur(24px);backdrop-filter:blur(24px)}
+.modal-bg{-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+@supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
+  .composer.glass,.pop.glass,.modal,.sidebar,.toast,.tabbar,.card.glass{background:color-mix(in srgb,var(--bg) 88%,transparent)}
+}
+.msg.ai:not(.sumcard)::before{filter:none}
+.gc{text-shadow:none}
+
+/* header: no band, pills only */
+.top.glass{background:none;border-bottom:0}
+.top.scrolled{background:linear-gradient(to bottom,color-mix(in srgb,var(--bgB) 70%,transparent),transparent);border-bottom:0}
+.dock{background:linear-gradient(to top,color-mix(in srgb,var(--bgC) 72%,transparent),transparent)}
+
+/* send glow on the compositor (opacity only) */
+.send[data-mode="ready"],.send[data-mode="stop"]{box-shadow:0 0 0 1.5px rgba(255,255,255,.9),0 0 0 5px rgba(255,255,255,.10),0 0 0 6px rgba(255,255,255,.28),0 12px 26px -8px rgba(0,0,0,.5)}
+.send[data-mode="ready"]::after{content:"";position:absolute;inset:-4px;border-radius:50%;box-shadow:0 0 34px rgba(255,255,255,.6);opacity:.18;animation:sendglow 2.6s ease-in-out infinite alternate;pointer-events:none}
+@keyframes sendglow{to{opacity:.55}}
+:root[data-theme="light"] .send[data-mode="ready"]::after{display:none}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .send[data-mode="ready"]::after{display:none}}
+:root[data-theme="light"] .send[data-mode="ready"],:root[data-theme="light"] .send[data-mode="stop"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.7),0 0 0 5px rgba(0,0,0,.06),0 12px 26px -8px rgba(0,0,0,.4)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .send[data-mode="ready"],:root:not([data-theme="dark"]) .send[data-mode="stop"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.7),0 0 0 5px rgba(0,0,0,.06),0 12px 26px -8px rgba(0,0,0,.4)}}
+
+/* popover footer chips */
+.pfoot{flex-wrap:wrap}.lkc{white-space:nowrap}
+
+/* keyboard: shell follows the visual viewport without a lagging top */
+.shell{transition:opacity .7s var(--ease),height .24s var(--ease)}
+
+/* tab bar */
+.tabbar{position:absolute;z-index:11;display:flex;gap:4px;padding:5px;border-radius:27px;background:linear-gradient(180deg,var(--p1),var(--p2)),color-mix(in srgb,var(--bg) 42%,transparent);box-shadow:inset 0 1px 0 var(--hl),inset 0 0 0 .5px var(--line-2),0 16px 32px -14px rgba(0,0,0,.6);transition:opacity .3s,transform .45s var(--ease)}
+.tabbar button{width:48px;height:40px;border-radius:20px;display:grid;place-items:center;color:var(--text-2);transition:background .3s,color .3s}
+.tabbar button:hover{color:var(--text)}
+.tabbar button.on{background:var(--send-bg);color:var(--send-fg)}
+@media (max-width:900px){
+  :root{--tab-h:50px}
+  :root.kb{--tab-h:0px}
+  .chat,.shell.pv-open .chat{margin:0;border-radius:0;border:0;box-shadow:none;background:none}
+  .tabbar{left:50%;bottom:calc(10px + var(--sab));transform:translateX(-50%)}
+  :root.kb .tabbar,.shell.pv-open .tabbar{opacity:0;pointer-events:none;transform:translate(-50%,16px)}
+  .dock{padding-bottom:calc(16px + var(--sab) + var(--tab-h))}
+}
+@media (min-width:901px){
+  .tabbar{right:14px;top:50%;transform:translateY(-50%);flex-direction:column;border-radius:27px}
+  .tabbar button{width:42px;height:42px;border-radius:50%}
+}
+.chat{background:linear-gradient(180deg,var(--p2),transparent 40%),color-mix(in srgb,var(--bg) 30%,transparent)}
+@media (max-width:900px){.chat,.shell.pv-open .chat{background:none}}
+body::before{display:none}
