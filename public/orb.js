@@ -42,25 +42,28 @@
   }
 
   /* 残量の球: 残りが下から満ち、使った分は上から暗くなる。50% / 80% に点線リング */
+  /* every gauge on the page shares rotation and drag, and is generated from the same seed, so they are identical */
+  const GS = { drag: 0, vel: 0, dragging: false };
+  function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function mkGauge(w) {
     if (w._orb) return; w._orb = 1;
     const size = +w.dataset.size || 220;
     w.style.width = size + 'px'; w.style.height = size + 'px';
     const cb = document.createElement('canvas'), cm = document.createElement('canvas'); cb.className = 'gb'; cm.className = 'gm'; w.append(cb, cm);
     const xb = setup(cb, size), xm = setup(cm, size);
-    const GP = fib(640);
-    const dust = Array.from({ length: 220 }, () => ({ a: Math.random() * TAU, r: 1.08 + Math.random() * .5, y: Math.random() * 2 - 1, v: (Math.random() - .5) * .0004, s: Math.random() * .9 + .3, ph: Math.random() * 9 }));
-    const bokeh = Array.from({ length: 16 }, () => ({ a: Math.random() * TAU, r: .2 + Math.random() * .9, y: Math.random() * 1.6 - .8, v: (Math.random() - .5) * .0003, s: size * .035 + Math.random() * size * .07, ph: Math.random() * 9 }));
-    let drag = 0, vel = 0, dragging = false, lx = 0, used = st.used;
-    w.addEventListener('pointerdown', (e) => { dragging = true; lx = e.clientX; try { w.setPointerCapture(e.pointerId); } catch { /* */ } });
-    w.addEventListener('pointermove', (e) => { if (!dragging) return; const dx = e.clientX - lx; lx = e.clientX; drag += dx * .012; vel = dx * .012; });
-    const up = () => { dragging = false; }; w.addEventListener('pointerup', up); w.addEventListener('pointercancel', up);
+    const GP = fib(640), rnd = mulberry(20241123);
+    const dust = Array.from({ length: 220 }, () => ({ a: rnd() * TAU, r: 1.08 + rnd() * .5, y: rnd() * 2 - 1, v: (rnd() - .5) * .0004, s: rnd() * .9 + .3, ph: rnd() * 9 }));
+    const bokeh = Array.from({ length: 16 }, () => ({ a: rnd() * TAU, r: .2 + rnd() * .9, y: rnd() * 1.6 - .8, v: (rnd() - .5) * .0003, s: size * .035 + rnd() * size * .07, ph: rnd() * 9 }));
+    let lx = 0, used = st.used; const G = GS;
+    w.addEventListener('pointerdown', (e) => { G.dragging = true; lx = e.clientX; try { w.setPointerCapture(e.pointerId); } catch { /* */ } });
+    w.addEventListener('pointermove', (e) => { if (!G.dragging) return; const dx = e.clientX - lx; lx = e.clientX; G.drag += dx * .012; G.vel = dx * .012; });
+    const up = () => { G.dragging = false; }; w.addEventListener('pointerup', up); w.addEventListener('pointercancel', up);
     items.add({ c: w, draw(t) {
       const P = pal(), W = size, R = W * .37, cx = W / 2, cy = W / 2;
       used += (Math.min(100, st.used) - used) * .1; const f = 1 - used / 100;
       const hot = st.state === 'alert' || used >= 50, tint = hot ? P.warm : P.cool;
-      if (!dragging) { vel *= .95; drag += vel; }
-      const ang = t * .00016 * (st.state === 'thinking' ? 2.4 : 1) + drag, tilt = .42;
+      if (!G.dragging) { G.vel *= .95; G.drag += G.vel; }
+      const ang = t * .00016 * (st.state === 'thinking' ? 2.4 : 1) + G.drag, tilt = .42;
       xm.clearRect(0, 0, W, W); xb.clearRect(0, 0, W, W);
       for (const b of bokeh) { b.a += b.v; const bx = cx + Math.cos(b.a) * b.r * R * 1.1, by = cy + b.y * R, al = .06 + .07 * (1 + Math.sin(t * .0006 + b.ph)) / 2; xb.fillStyle = `rgba(${hot ? 255 : P.bokeh[0]},${hot ? 200 : P.bokeh[1]},${hot ? 120 : P.bokeh[2]},${al})`; xb.beginPath(); xb.arc(bx, by, b.s, 0, TAU); xb.fill(); }
       const gr = xb.createRadialGradient(cx, cy, 0, cx, cy, R * 1.05); gr.addColorStop(0, `rgba(${tint[0]},${tint[1]},${hot ? 140 : tint[2]},${.16 * f + .03})`); gr.addColorStop(1, 'rgba(0,0,0,0)'); xb.fillStyle = gr; xb.fillRect(0, 0, W, W);

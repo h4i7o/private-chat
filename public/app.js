@@ -157,7 +157,7 @@ async function enter(user) {
   await Promise.all([loadState(), loadChats()]);
   chatQ = ''; $('#chatQ').value = ''; S.chat = null; S.model = 'sonnet'; S.search = false; S.atts = []; S.text = ''; S.live = 0; S.quotes = {}; S.edit = null; S.draft = null;
   $('#auth').classList.add('out'); setTimeout(() => { $('#auth').hidden = true; }, 600);
-  const sh = $('#shell'); sh.hidden = false; if (innerWidth <= 900) sh.classList.remove('sb-open'); requestAnimationFrame(() => sh.classList.add('on'));
+  const sh = $('#shell'); sh.hidden = false; sh.classList.remove('sb-open'); requestAnimationFrame(() => sh.classList.add('on'));
   $('#sbAv').textContent = S.user[0]; $('#sbName').textContent = S.user;
   $('#sbRole').innerHTML = isOwner() ? ic('crown', 'sm') + 'Owner' : ic('user', 'sm') + 'User';
   $('#input').value = ''; autosize(); renderAll(); renderMem(); loadMemCount(); recount(true); setTimeout(() => $('#input').focus(), 700);
@@ -292,7 +292,9 @@ function orbSync() {
   if (typeof Orb === 'undefined') return;
   const p = pctOf(usedNano());
   const state = p >= 90 ? 'alert' : S.streaming ? (S.phase === 'speak' ? 'speaking' : 'thinking') : p >= 80 ? 'alert' : 'idle';
-  Orb.set({ state, used: p }); $('#composer')?.classList.toggle('busy', !!S.streaming);
+  Orb.set({ state, used: p });
+  const hg = $('.empty .gwrap'); if (hg) { hg.className = 'gwrap ' + (p >= 80 ? 'bad' : p >= 50 ? 'hot' : ''); const d = hg.querySelector('.dm'); if (d) d.textContent = fmtPct(Math.max(0, 100 - p)) + '%'; }
+  $('#composer')?.classList.toggle('busy', !!S.streaming);
 }
 const thkHTML = (label) => `<div class="thk"><span class="orbw"><canvas data-orb="mini" data-size="48"></canvas></span><div class="tt"><b>${label}</b><p class="tc"></p></div></div>`;
 function renderBudget() {
@@ -620,7 +622,7 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
 function renderThread() {
   const t = $('#thread'), c = S.chat;
   if (!c || !c.msgs.length) {
-    t.innerHTML = '<div class="empty"><div class="hero-orb"><div class="gws" data-gauge data-size="188"></div></div></div>'; Orb.scan(t); return;
+    { const p = pctOf(usedNano()); t.innerHTML = `<div class="empty"><div class="gwrap ${p >= 80 ? 'bad' : p >= 50 ? 'hot' : ''}"><div class="gws" data-gauge data-size="212"></div><div class="gc"><span class="dm">${fmtPct(Math.max(0, 100 - p))}%</span></div></div></div>`; Orb.scan(t); return; }
   }
   t.innerHTML = '';
   c.msgs.forEach((m) => { if (m.role === 'user') t.insertAdjacentHTML('beforeend', userHTML(m)); else { const el = isSum(m) ? addSumDOM(m, true) : addAiDOM(m, true); renderAiBody(el.querySelector('.ai-body'), m, false); finishAiDOM(el, m, true); } });
@@ -901,7 +903,7 @@ function md(src, cites, sources) {
       out += `<div class="afc ${open ? 'live' : ''}" data-k="${k}" role="button" tabindex="0" aria-label="Open ${esc(fi.name)}"><span class="afi"><span>${esc(fi.ext.slice(0, 4))}</span></span><span class="afm"><b>${esc(fi.name)}</b><small>${esc(KIND[fi.ext] || fi.ext.toUpperCase())} · ${n} lines${open ? ' · writing' : ''}</small></span><span class="afa"><button class="ib sm" data-act="fdl" aria-label="Download">${ic('download', 'sm')}</button><svg class="i sm chv"><use href="#i-chevr"/></svg></span></div>`;
     } else {
       const n = code ? code.replace(/\n$/, '').split('\n').length : 0;
-      out += `<div class="code ${open ? 'open' : ''}" data-lang="${esc(lang)}"><div class="code-h"><span>${esc(lang)}</span>${n > 5 ? `<span class="ln">${n} lines</span>` : ''}<span class="grow"></span>${lang === 'html' ? `<button class="ib sm" data-act="pv" aria-label="Preview">${ic('eye', 'sm')}</button>` : ''}<button class="ib sm" data-act="dl" aria-label="Save as file">${ic('download', 'sm')}</button><button class="ib sm" data-act="copy" aria-label="Copy">${ic('copy', 'sm')}</button></div><pre><code>${esc(code)}</code></pre></div>`;
+      out += `<div class="code ${open ? 'open' : ''}" data-lang="${esc(lang)}"><div class="code-h"><span>${esc(lang)}</span>${n > 5 ? `<span class="ln">${n} lines</span>` : ''}<span class="grow"></span>${lang === 'html' ? `<button class="ib sm" data-act="pv" aria-label="Preview">${ic('eye', 'sm')}</button>` : ''}<button class="ib sm" data-act="dl" aria-label="Save as file">${ic('download', 'sm')}</button><button class="ib sm" data-act="copy" aria-label="Copy">${ic('copy', 'sm')}</button></div><pre><code>${HL.html(code, lang)}</code></pre></div>`;
     }
     last = re.lastIndex;
   }
@@ -945,16 +947,17 @@ addEventListener('message', (e) => {
 });
 function pvPost(msg) { if (msg.scripts && msg.force) { S.pv.errs = []; renderPvErr(); } const f = $('#pvFrame iframe'); if (!f) return; if (S.pv.ready) f.contentWindow.postMessage(msg, '*'); else S.pv.pending = msg; }
 function pvStream(html, done, final) {
-  if (S.pv.kind !== 'html') pvKind('html'); S.pv.html = html; $('#pvCode').textContent = html;
+  if (S.pv.kind !== 'html') pvKind('html'); S.pv.html = html; pvSetCode(html, 'html');
   if (!S.pv.open && innerWidth >= 1000) pvShow();
   if (!S.pv.open) { renderPvBtn(); return; }
   if (final) { pvPost({ html, scripts: true, force: true }); renderPvVer(); return; }
   const now = performance.now(); if (now - S.pv.last < 260) return; S.pv.last = now;
   pvPost({ html, scripts: false });
 }
+function pvSetCode(text, lang) { const el = $('#pvCode'); el.innerHTML = '<code>' + HL.html(text, lang, { lines: true }) + '</code>'; el.dataset.lang = HL.norm(lang); }
 function pvShow() { renderPvVer(); pvEnsureFrame(); S.pv.open = true; $('#shell').classList.add('pv-open'); if (innerWidth <= 900) $('#shell').classList.remove('sb-open'); setSeg('#pvMode'); setSeg('#pvDev'); renderPvBtn(); }
 function pvOpen(html, vi, name) {
-  pvKind('html', name); S.pv.html = html; $('#pvCode').textContent = html;
+  pvKind('html', name); S.pv.html = html; pvSetCode(html, 'html');
   if (vi === undefined) vi = htmlVersions().findIndex((x) => x.html === html);
   S.pv.vi = vi; pvShow(); pvPost({ html, scripts: true, force: true });
 }
@@ -971,7 +974,7 @@ function pvKind(kind, name, f) {
 }
 function fileOpen(f) {
   if (f.ext === 'html' || f.lang === 'html') { const i = htmlVersions().findIndex((x) => x.html === f.code); return pvOpen(f.code, i, f.name); }
-  pvKind('file', f.name, f); S.pv.html = f.code; $('#pvCode').textContent = f.code;
+  pvKind('file', f.name, f); S.pv.html = f.code; pvSetCode(f.code, f.lang || f.ext);
   if (f.ext === 'md') $('#pvDoc').innerHTML = md(f.code);
   pvShow(); setSeg('#pvMode'); $('#pvVer').hidden = true;
 }

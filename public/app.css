@@ -698,7 +698,7 @@ textarea{transition:height .18s var(--ease)}
 /* ======================================================================
    v6: glassmorphism / Geist + Instrument Serif + IBM Plex Sans JP / Phosphor / GSAP
    ====================================================================== */
-:root{--font:"Geist Sans","IBM Plex Sans JP",-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;--serif:"Instrument Serif","IBM Plex Sans JP","Hiragino Mincho ProN",serif;--blur:blur(28px) saturate(1.6)}
+:root{--font:"Geist Sans","Noto Sans JP",-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",system-ui,sans-serif;--serif:"Instrument Serif","Noto Sans JP","Hiragino Mincho ProN",serif;--blur:blur(28px) saturate(1.6)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1b1f;--surface:rgba(58,58,66,.82);--surface-2:rgba(255,255,255,.065);--glass:rgba(44,44,50,.40);
 --fill:rgba(255,255,255,.09);--hover:rgba(255,255,255,.09);--line:rgba(255,255,255,.11);--line-2:rgba(255,255,255,.2);
 --hl:rgba(255,255,255,.24);--p1:rgba(255,255,255,.15);--p2:rgba(255,255,255,.045);
@@ -1085,3 +1085,41 @@ html,:root:not([data-theme="light"]),:root[data-theme="dark"],:root[data-theme="
 .bgfx{z-index:-1}
 body::before{display:block;content:"";position:fixed;top:0;left:0;right:0;bottom:0;width:auto;height:auto;z-index:0;pointer-events:none;border-radius:0;filter:none;animation:none;-webkit-mask-image:none;mask-image:none;background-size:auto;background-image:linear-gradient(to bottom,var(--edge) 0,transparent 60px),linear-gradient(to top,var(--edge) 0,color-mix(in srgb,var(--edge) 70%,transparent) 14px,transparent 110px)}
 .scroll{-webkit-mask-image:linear-gradient(to bottom,transparent 0,transparent calc(var(--sat) + 44px),#000 calc(var(--sat) + 92px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52));mask-image:linear-gradient(to bottom,transparent 0,transparent calc(var(--sat) + 44px),#000 calc(var(--sat) + 92px),#000 calc(100% - var(--dock-h,170px) + 26px),transparent calc(100% - var(--dock-h,170px) * .52))}
+
+/* ======================================================================
+   v11: syntax colours, compact composer (~85%), shared hero gauge, Noto Sans JP
+   ====================================================================== */
+:root{--t-kw:#7c3aed;--t-s:#15803d;--t-n:#c2410c;--t-c:#7b8190;--t-f:#1d4ed8;--t-t:#0f766e;--t-a:#a16207;--t-p:#9a9aa5;--t-m:#be123c}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--t-kw:#c4a7ff;--t-s:#a3d9a5;--t-n:#f2b077;--t-c:#7d8590;--t-f:#8ab4f8;--t-t:#7fd1c7;--t-a:#f0c674;--t-p:#8b8b96;--t-m:#ff9a9a}}
+:root[data-theme="dark"]{--t-kw:#c4a7ff;--t-s:#a3d9a5;--t-n:#f2b077;--t-c:#7d8590;--t-f:#8ab4f8;--t-t:#7fd1c7;--t-a:#f0c674;--t-p:#8b8b96;--t-m:#ff9a9a}
+.t-k{color:var(--t-kw)}.t-s{color:var(--t-s)}.t-n{color:var(--t-n)}.t-c{color:var(--t-c);font-style:italic}.t-f{color:var(--t-f)}.t-t{color:var(--t-t)}.t-a{color:var(--t-a)}.t-p{color:var(--t-p)}.t-m{color:var(--t-m)}
+.code pre code,.pv-code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace,"Noto Sans JP";font-variant-ligatures:none;tab-size:2}
+.pv-code{counter-reset:ln;line-height:1.7}
+.pv-code code{background:none;padding:0;font:inherit;color:var(--text)}
+.pv-code .l::before{counter-increment:ln;content:counter(ln);display:inline-block;width:3.4em;margin-right:1.1em;text-align:right;color:var(--text-3);opacity:.7;user-select:none}
+.pv-code[data-lang="plain"] .l::before{opacity:.5}
+
+/* the empty-chat sphere is the Usage gauge itself */
+.empty .gwrap{margin:0;animation:heroIn 1.2s var(--ease) both}
+.empty .gws{cursor:grab}
+
+/* composer at ~85% */
+.composer{max-width:650px;padding:10px 10px 8px;gap:7px}
+.composer.glass{border-radius:26px}
+.dock{padding-bottom:calc(14px + var(--sab))}
+.cmeter{gap:6px;padding:1px 5px 0}
+.nums{font-size:11px;gap:12px;min-height:17px}
+.crow .ib,.crow .tog,.composer .tog{width:31px;height:31px}
+.crow .ib .i,.composer .tog .i{width:17px;height:17px}
+.send{width:33px;height:33px}
+.send .i{width:17px;height:17px}
+#input{font-size:14.5px;line-height:1.5}
+@media (max-width:900px){
+  .composer{max-width:none;padding:8px 8px 6px;gap:5px}
+  .composer.glass{border-radius:24px}
+  .crow .ib,.crow .tog,.composer .tog{width:30px;height:30px}
+  .send{width:32px;height:32px}
+  .nums{font-size:10.5px;gap:8px}
+  #input{font-size:16px}
+  .dock{padding-bottom:calc(8px + var(--sab) + var(--tab-h))}
+}
