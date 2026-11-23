@@ -293,7 +293,7 @@ function orbSync() {
   const p = pctOf(usedNano());
   const state = p >= 90 ? 'alert' : S.streaming ? (S.phase === 'speak' ? 'speaking' : 'thinking') : p >= 80 ? 'alert' : 'idle';
   Orb.set({ state, used: p });
-  const hg = $('.empty .gwrap'); if (hg) { hg.className = 'gwrap ' + (p >= 80 ? 'bad' : p >= 50 ? 'hot' : ''); const d = hg.querySelector('.dm'); if (d) d.textContent = fmtPct(Math.max(0, 100 - p)) + '%'; }
+  const hg = $('.empty .gwrap'); if (hg) { hg.className = 'gwrap ' + (p >= 80 ? 'bad' : p >= 50 ? 'hot' : ''); }
   $('#composer')?.classList.toggle('busy', !!S.streaming);
 }
 const thkHTML = (label) => `<div class="thk"><span class="orbw"><canvas data-orb="mini" data-size="48"></canvas></span><div class="tt"><b>${label}</b><p class="tc"></p></div></div>`;
@@ -622,7 +622,7 @@ async function runStream({ k, q, text = '', atts = [], useSearch = false, um = n
 function renderThread() {
   const t = $('#thread'), c = S.chat;
   if (!c || !c.msgs.length) {
-    { const p = pctOf(usedNano()); t.innerHTML = `<div class="empty"><div class="gwrap ${p >= 80 ? 'bad' : p >= 50 ? 'hot' : ''}"><div class="gws" data-gauge data-size="212"></div><div class="gc"><span class="dm">${fmtPct(Math.max(0, 100 - p))}%</span></div></div></div>`; Orb.scan(t); return; }
+    { const p = pctOf(usedNano()); t.innerHTML = `<div class="empty"><div class="gwrap ${p >= 80 ? 'bad' : p >= 50 ? 'hot' : ''}"><div class="gws" data-gauge data-size="212"></div></div></div>`; Orb.scan(t); return; }
   }
   t.innerHTML = '';
   c.msgs.forEach((m) => { if (m.role === 'user') t.insertAdjacentHTML('beforeend', userHTML(m)); else { const el = isSum(m) ? addSumDOM(m, true) : addAiDOM(m, true); renderAiBody(el.querySelector('.ai-body'), m, false); finishAiDOM(el, m, true); } });
