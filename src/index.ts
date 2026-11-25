@@ -43,7 +43,13 @@ const MAX_REQUEST_BYTES = 24 * 1024 * 1024;
 const IMAGE_MIME = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 const MIN_OUT_TOKENS = 256;
 
-const cap = (env: Env) => Math.round(Number(env.CAP_USD || '25') * NANO);
+const CAP_MIN_USD = 0.01, CAP_MAX_USD = 100000;
+// 上限は設定(DB)を優先し、なければ環境変数 CAP_USD(既定 25)。最高権限者が画面から変えられる。
+const cap = async (env: Env): Promise<number> => {
+  const r = await env.DB.prepare("SELECT value FROM settings WHERE key = 'capNano'").first<{ value: string }>().catch(() => null);
+  const v = r ? Number(r.value) : NaN;
+  return Number.isFinite(v) && v > 0 ? Math.round(v) : Math.round(Number(env.CAP_USD || '25') * NANO);
+};
 const err = (c: Context, status: number, code: string, message: string) =>
   c.json({ error: code, message }, status as 400);
 
@@ -372,13 +378,22 @@ api.post('/ledger/reset', needOwner, async (c) => {
   ]);
   return c.json({ ledger: await readLedger(c.env.DB, Date.now()) });
 });
+// 上限額を手入力で変える(最高権限者のみ)。使用額・予約はそのまま。
+api.post('/ledger/cap', needOwner, async (c) => {
+  const b = await c.req.json().catch(() => null);
+  const usd = Number(b?.usd);
+  if (!Number.isFinite(usd) || usd < CAP_MIN_USD || usd > CAP_MAX_USD) return err(c, 400, 'invalid', `Enter $${CAP_MIN_USD} to $${CAP_MAX_USD}`);
+  const nano = Math.round(usd * NANO);
+  await c.env.DB.prepare("INSERT INTO settings (key, value) VALUES ('capNano', ?1) ON CONFLICT(key) DO UPDATE SET value = ?1").bind(String(nano)).run();
+  return c.json({ capNano: nano, ledger: await readLedger(c.env.DB, Date.now()) });
+});
 // Console の実額に合わせて使用額を直接設定する(最高権限者のみ)。モデル別の内訳は新しい合計に比例して直す。
 api.post('/ledger/set', needOwner, async (c) => {
   const b = await c.req.json().catch(() => null);
   const usd = Number(b?.usd);
   if (!Number.isFinite(usd) || usd < 0) return err(c, 400, 'invalid', 'Enter an amount');
   const nano = Math.round(usd * 1e9);
-  if (nano > cap(c.env)) return err(c, 400, 'invalid', 'Amount exceeds the cap');
+  if (nano > await cap(c.env)) return err(c, 400, 'invalid', 'Amount exceeds the cap');
   await c.env.DB.batch([
     c.env.DB.prepare('UPDATE ledger_models SET spent = CAST(ROUND(1.0 * spent * ?1 / (SELECT SUM(spent) FROM ledger_models)) AS INTEGER) WHERE (SELECT SUM(spent) FROM ledger_models) > 0').bind(nano),
     c.env.DB.prepare('UPDATE ledger_models SET spent = 0 WHERE (SELECT SUM(spent) FROM ledger_models) = 0 OR ?1 = 0').bind(nano),
@@ -450,7 +465,7 @@ api.get('/state', async (c) => {
   const [ledger, maxTokens, cfg] = await Promise.all([readLedger(c.env.DB, Date.now()), readMaxTokens(c.env.DB), readConfig(c.env.DB)]);
   return c.json({
     user: { name: u.name, role: u.role },
-    capNano: cap(c.env),
+    capNano: await cap(c.env),
     ledger,
     maxTokens,
     models: Object.fromEntries(MODEL_KEYS.map((k) => [k, { name: MODELS[k].name, in: MODELS[k].in, out: MODELS[k].out, recMax: MODELS[k].recMax }])),
@@ -792,7 +807,7 @@ api.post('/quote', async (c) => {
   const isNewChat = !b.chatId;
   const empty = !text && atts.length === 0;
   const [ledger, maxTokens] = await Promise.all([readLedger(c.env.DB, Date.now()), readMaxTokens(c.env.DB)]);
-  const remaining = cap(c.env) - ledger.spent - ledger.reserved;
+  const remaining = (await cap(c.env)) - ledger.spent - ledger.reserved;
 
   let content: unknown[] = [];
   if (!empty) {
@@ -825,7 +840,7 @@ api.post('/quote', async (c) => {
     if (e instanceof UpstreamError) return err(c, 502, 'count_failed', `Could not count tokens: ${upstreamMessage(e)}`);
     throw e;
   }
-  return c.json({ models, ledger, capNano: cap(c.env) });
+  return c.json({ models, ledger, capNano: await cap(c.env) });
 });
 
 /* ------------------------------------------------------------------ 送信(SSE) */
@@ -930,7 +945,7 @@ api.post('/send', async (c) => {
   const reservationId = randomHex(8);
   const now = Date.now();
   const minViable = q.inputNano + q.searchWorstNano + MIN_OUT_TOKENS * m.out;
-  const res = await reserve(env.DB, reservationId, now, cap(env), q.worstNano, minViable);
+  const res = await reserve(env.DB, reservationId, now, await cap(env), q.worstNano, minViable);
   if (!res.ok) {
     return err(c, 402, res.why === 'cap' ? 'cap' : 'limiter', res.why === 'cap' ? 'Cap reached' : 'Worst case exceeds balance (owner can unlock)');
   }
@@ -1045,7 +1060,7 @@ api.post('/send', async (c) => {
     const totalIn = (usage.input_tokens ?? 0) + (usage.cache_read_input_tokens ?? 0) + (usage.cache_creation_input_tokens ?? 0);
     const histAfter = compact ? estText(out) + 300 : totalIn + Math.min(usage.output_tokens ?? 0, estText(out));
     const meta = {
-      cost: actual, pct: actual / cap(env) * 100, model, searches: usage.server_tool_use?.web_search_requests ?? searches,
+      cost: actual, pct: actual / (await cap(env)) * 100, model, searches: usage.server_tool_use?.web_search_requests ?? searches,
       sources, stopped, estimated, truncated: stopReason === 'max_tokens', usage, effort, rid, hist: histAfter,
       ...(think ? { think } : {}), ...(cites.length ? { cites } : {}),
     };

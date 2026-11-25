@@ -1078,7 +1078,7 @@ const TABS = {
   async budget() {
     const used = S.ledger.spent, pct = pctOf(used), c = S.config;
     return `<div class="m-title">${ic('gauge', 'sm')}Budget</div><div class="group">
-      ${row(ic('lock') + '<span>Cap</span>', dm('$' + usd(S.cap).toFixed(2)) + ' fixed')}
+      <div class="row"><div class="lb">${ic('lock')}<span>Cap<small>Now ${dm('$' + usd(S.cap).toFixed(2))}. Enter a new limit (USD)</small></span></div><div class="val"><input class="n" style="width:86px" type="text" inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="${usd(S.cap).toFixed(2)}" id="setCap" aria-label="Cap (USD)"><button class="btn pri" data-setcap aria-label="Apply cap">${ic('check', 'sm')}</button></div></div>
       ${row(ic('gauge') + '<span>Used</span>', dm(fmtUSD(usd(used)) + ' · ' + fmtPct(pct) + '%'))}
       <div class="row"><div class="lb">${ic('reset')}<span>Reset</span></div><button class="btn dng" data-reset>${ic('reset', 'sm')}<span>Reset usage</span></button></div>
       ${S.syncAvailable ? `<div class="row"><div class="lb">${ic('gauge')}<span>Console actual<small>${S.syncRes ? 'Console ' + dm(fmtUSD(usd(S.syncRes.consoleNano))) + '(' + esc(S.syncRes.since) + '~) / Site ' + dm(fmtUSD(usd(S.syncRes.siteNano))) : 'Fetch totals with the admin key (read-only)'}</small></span></div><div class="val"><button class="btn" data-sync>Fetch</button>${S.syncRes ? `<button class="btn pri" data-apply-sync aria-label="Apply this amount">${ic('check', 'sm')}</button>` : ''}</div></div>` : ''}
@@ -1126,7 +1126,6 @@ const TABS = {
 };
 function bindTab(main, redraw) {
   const fail = (x) => { const er = $('#uErr'); if (er) { er.textContent = x.message; er.classList.add('on'); } else toast(x.message, 'alert', 'warn'); shake(main); };
-  main.onkeydown = (e) => { if (e.key === 'Enter' && e.target.id === 'setSpent') { e.preventDefault(); main.querySelector('[data-setspent]').click(); } };
   main.onclick = async (e) => {
     const q = (s) => e.target.closest(s);
     try {
@@ -1135,6 +1134,12 @@ function bindTab(main, redraw) {
         const b = q('[data-reset]');
         if (!b.classList.contains('arm')) { b.classList.add('arm'); b.querySelector('span').textContent = 'Press again to confirm'; setTimeout(() => { if (b.isConnected) { b.classList.remove('arm'); b.querySelector('span').textContent = 'Reset usage'; } }, 3000); }
         else { S.ledger = (await req('/ledger/reset', { method: 'POST' })).ledger; renderBudget(); recount(true); redraw(); toast('Usage reset', 'reset'); }
+      }
+      if (q('[data-setcap]')) {
+        const v = parseFloat(String($('#setCap').value).normalize('NFKC').replace(/[,，]/g, '.').replace(/[^0-9.]/g, ''));
+        if (!Number.isFinite(v) || v <= 0) throw new Error('Enter an amount');
+        const r = await req('/ledger/cap', { method: 'POST', body: { usd: v } });
+        S.cap = r.capNano; S.ledger = r.ledger; renderBudget(); recount(true); redraw(); toast('Cap set to $' + v.toFixed(2), 'check');
       }
       if (q('[data-setspent]')) {
         const v = parseFloat(String($('#setSpent').value).normalize('NFKC').replace(/[,，]/g, '.').replace(/[^0-9.]/g, ''));
@@ -1180,7 +1185,11 @@ function bindTab(main, redraw) {
       if (q('[data-logout]')) { closeModal(); logout(); }
     } catch (x) { fail(x); }
   };
-  main.onkeydown = (e) => { if (e.key === 'Enter' && !e.isComposing && e.target.id === 'memNew') { e.preventDefault(); main.querySelector('[data-madd]').click(); } };
+  main.onkeydown = (e) => {
+    if (e.key !== 'Enter' || e.isComposing) return;
+    const id = e.target.id, btn = { memNew: '[data-madd]', setSpent: '[data-setspent]', setCap: '[data-setcap]' }[id];
+    if (btn) { e.preventDefault(); main.querySelector(btn)?.click(); }
+  };
   main.onchange = async (e) => {
     const me = e.target.closest('[data-medit]');
     if (me) { try { const v = me.value.trim(); if (!v) throw new Error('Enter some text'); await req('/memories/' + me.dataset.medit, { method: 'PATCH', body: { text: v } }); } catch (x) { fail(x); } return; }
